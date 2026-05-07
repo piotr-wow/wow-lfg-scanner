@@ -453,6 +453,35 @@ function P.extractActualLeader(raw)
   return nil
 end
 
+function P.extractDiscordStatus(low)
+  -- 1. Eksplicytnie NIE wymagane (silent runs).
+  if low:find("no%s+discord") or low:find("no%s+voice") or low:find("no%s+mic")
+     or low:find("silent%s+run") or low:find("silent%s+raid")
+     or low:find("without%s+discord") or low:find("don't%s+need%s+discord") then
+    return "not_required"
+  end
+
+  -- 2. Eksplicytnie WYMAGANE.
+  if low:find("discord%s+mandatory") or low:find("mandatory%s+discord")
+     or low:find("discord%s+req") or low:find("discord%s+required")
+     or low:find("discord%s+must") or low:find("discord%s+a%s+must")
+     or low:find("must%s+have%s+discord") or low:find("must%s+join%s+discord")
+     or low:find("voice%s+req") or low:find("voice%s+mandatory")
+     or low:find("must%s+have%s+voice") or low:find("voice%s+chat%s+req") then
+    return "required"
+  end
+
+  -- 3. Link do serwera Discord ALBO sama wzmianka "discord" / "disc" - zwykle
+  -- oznacza ze trzeba dolaczyc do serwera. Tu klasyfikujemy jako wymagane.
+  if low:find("discord%.gg/") or low:find("discord%.com/")
+     or low:find("%sdiscord%s") or low:find("%sdiscord$") or low:find("^discord%s")
+     or low:find("%sdisc%s") or low:find("using%s+discord") or low:find("on%s+discord") then
+    return "required"
+  end
+
+  return "unknown"
+end
+
 -- =============================================================
 -- Glowny entry
 -- =============================================================
@@ -492,6 +521,7 @@ function P.parse(msg, author)
   out.ach_req = P.extractAchReq(raw, low)
   out.role_needs = P.extractRoles(low)
   out.actual_leader = P.extractActualLeader(raw)
+  out.discord_status = P.extractDiscordStatus(low)
   out.fresh = (low:find("fresh") and true) or false
 
   return out
