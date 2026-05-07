@@ -9,11 +9,14 @@ Repo zawiera wiele addonow w `addons/` dzielacych jeden skrypt deploya.
 
 ## Status
 
-**Faza 1 (in progress):** `LFGScannerLogger` zbiera surowe wpisy z czatu do
-SavedVariables, zeby na realnych danych ustalic regexy/heurystyki dla parsera.
+**Faza 1 (done):** `LFGScannerLogger` - addon do logowania surowych wpisow z czatu.
+Sluzy do zbierania probek pod heurystyki parsera. Mozna trzymac wlaczony
+rownolegle z fazą 2 zeby gromadzic dalsze dane.
 
-**Faza 2 (planowana):** `LFGScanner` - wlasciwy addon z tabelka, tooltipem
-pelnego ogloszenia, timeoutami inactive=5min, drop=10min.
+**Faza 2 (kod gotowy, in-game test pending):** `LFGScanner` - wlasciwy addon z
+tabelka aktywnych raidow, tooltipem pelnego ogloszenia, deduplikacja
+multi-channel/multi-officer, lifecycle inactive=5min/drop=10min, klik = whisper.
+Slash: `/lfg show|hide|toggle|reset|stats|resetpos`.
 
 Dokumentacja:
 - [docs/PHASES.md](docs/PHASES.md) - fazy projektu.
@@ -48,6 +51,26 @@ WOW_DIR=/inna/sciezka ./scripts/deploy.sh
 Skrypt po prostu kopiuje katalog addonu do `Interface/AddOns/` (najpierw kasuje
 poprzednia wersje). Po deployu w grze wymagany jest `/reload` lub ponowne
 zalogowanie.
+
+## Faza 2 - jak uzywac LFGScanner
+
+1. `./scripts/deploy.sh LFGScanner`
+2. Wejdz do gry, wlacz w AddOns na ekranie wyboru postaci.
+3. Po zalogowaniu pojawi sie ramka `LFG Scanner`. Mozna ja przesunac (drag
+   za pasek tytulu) i zmienic rozmiar (uchwyt prawy-dolny rog).
+4. Ramka aktualizuje sie automatycznie - kazdy `LFM` z czatu w `general`,
+   `global`, `trade`, `world`, `lookingforgroup` jest klasyfikowany,
+   deduplikowany i wyswietlany.
+5. Po najechaniu na wiersz - tooltip z pelnym ogloszeniem + lista posterow,
+   kanalow, liczba postow.
+6. Kliknij wiersz LMB - otworzy sie chat z `/w <poster>`.
+7. Slash:
+   - `/lfg` lub `/lfg toggle` - pokaz/ukryj
+   - `/lfg reset` - wyczysc liste raidow
+   - `/lfg stats` - liczba aktywnych raidow
+   - `/lfg resetpos` - przywroc domyslna pozycje/rozmiar ramki
+
+Heurystyki klasyfikacji i ekstrakcji - patrz [docs/PARSING.md](docs/PARSING.md).
 
 ## Faza 1 - jak uzywac LFGScannerLogger
 

@@ -1,0 +1,12 @@
+## Interface: 30300
+## Title: LFG Scanner
+## Notes: Live raid LFM tracker built from /general and /global chat
+## Author: piotr
+## Version: 0.1.0
+## SavedVariables: LFGScannerDB
+
+core.lua
+parser.lua
+aggregator.lua
+ui.lua
+main.lua
