@@ -126,6 +126,89 @@ function P.normalize(s)
 end
 
 -- =============================================================
+-- Filtr jezykowy (akceptujemy tylko angielski)
+-- =============================================================
+
+-- Tagi jezykowe wskazujace nie-angielski.
+P.NON_EN_LANG_TAGS = {
+  "%[ru%]", "%[rus%]", "%[de%]", "%[ger%]", "%[fr%]", "%[fra%]",
+  "%[es%]", "%[esp%]", "%[br%]", "%[pt%]", "%[pl%]",
+  "%[balkan%]", "%[sr%]", "%[srb%]", "%[bs%]", "%[hr%]",
+  "%[bg%]", "%[ge%]", "%[gr%]", "%[it%]", "%[tr%]", "%[cn%]",
+}
+
+-- Slowa charakterystyczne dla nie-angielskiego.
+P.NON_EN_KEYWORDS = {
+  -- DE
+  "wir%s+sind", "wöchent", "deutsch", "raiden", "mitspielern",
+  "individuell", "miteinander", "freundlich", "gilde",
+  -- Balkan/SR/HR/BS
+  "regrutira", "regrutiranje", "igrace", "igraci", "aktivne",
+  "potrebni", "koristimo", "dopunili", "dobrodosli", "raidu",
+  "balkan", "srpsk", "bosansk", "hrvatsk", "discord%s*je",
+  -- PL
+  "rekrutuje", "rekrutacja", "szukamy",
+  -- RU/CYR translit (charakterystyczne fragmenty)
+  "pyc[ck][ko]", "rycc?ko", "rycc?ka", "npurJI", "npuhuM",
+  "ko[Mm]aH", "ack[Oo]B", "rocyga", "umpok",
+}
+
+function P.hasNonAsciiBytes(s, threshold)
+  threshold = threshold or 5
+  local count = 0
+  for i = 1, #s do
+    if s:byte(i) > 127 then
+      count = count + 1
+      if count >= threshold then return true end
+    end
+  end
+  return false
+end
+
+function P.looksLikeTranslitWord(word)
+  -- Cyrylica zatluszczona ASCII charakteryzuje sie:
+  -- - mieszanymi kapitalami: "JIb", "BO", "yI", "OB"
+  -- - cyfra w srodku slowa: "9l", "g9eT", "u9eT"
+  -- - ciagi 2+ kapitalnych nie na poczatku: "BCEX", "K/\ACCOB"
+  if word:len() < 4 then return false end
+  if word:match("[a-z][A-Z][A-Z]") then return true end       -- npurJI
+  if word:match("[A-Za-z]%d[A-Za-z]") then return true end    -- u9eT, g9eT
+  if word:match("[A-Z][A-Z][A-Z]") and not word:match("^[A-Z][A-Z][A-Z]+$") then
+    return true                                                 -- BCEX wewnatrz
+  end
+  return false
+end
+
+function P.isEnglishOnly(raw)
+  if not raw or raw == "" then return true end
+  local low = raw:lower()
+
+  -- 1. Tagi jezykowe na poczatku/w naglowku
+  for _, tag in ipairs(P.NON_EN_LANG_TAGS) do
+    if low:find(tag) then return false end
+  end
+
+  -- 2. Bajty UTF-8 spoza ASCII (cyrylica, polskie/niemieckie/balkanowskie diakrytyki)
+  if P.hasNonAsciiBytes(raw, 5) then return false end
+
+  -- 3. Slowa-markery jezykow obcych
+  for _, kw in ipairs(P.NON_EN_KEYWORDS) do
+    if low:find(kw) then return false end
+  end
+
+  -- 4. Heurystyka cyrylicy zatluszczonej ASCII (translit)
+  local translit_count = 0
+  for word in raw:gmatch("%S+") do
+    if P.looksLikeTranslitWord(word) then
+      translit_count = translit_count + 1
+      if translit_count >= 3 then return false end
+    end
+  end
+
+  return true
+end
+
+-- =============================================================
 -- Klasyfikacja
 -- =============================================================
 
@@ -154,17 +237,25 @@ function P.isBoostSell(low)
 end
 
 function P.isGuildRecruit(low, raw)
+  -- Prefix < ... > / > ... < / << ... >> na poczatku - prawie zawsze gildia/boost,
+  -- chyba ze sa silne sygnaly LFM_RAID (LFM + (N/M) + Need + raid).
   local prefix_bracket = raw:match("^%s*[<>]") and true or false
   if prefix_bracket then
-    if low:find("recruit") or low:find("regrutira") or low:find("rekrutuje")
-       or low:find("looking%s+for%s+raid") or low:find("looking%s+for%s+active")
-       or low:find("guild%s") or low:find("gilde") or low:find("ищем") then
-      return true
-    end
+    local strong_lfm = (
+      (low:find("^<.->%s*lfm") or low:find("^>.-<%s*lfm") or low:find("%s+lfm%s")) and
+      low:find("%(%d+/%d+%)") and
+      (low:find("need%s") or low:find("need,") or low:find("need:") or low:find("^need"))
+    ) and true or false
+    if not strong_lfm then return true end
   end
-  if low:find("recruiting") and low:find("guild") then return true end
+
+  if low:find("recruiting") then return true end  -- "guild recruiting", "<X> recruiting", etc.
+  if low:find("recruit%s") then return true end
   if low:find("regrutira") then return true end
   if low:find("rekrutuje") then return true end
+  if low:find("looking%s+for%s+raiders") then return true end
+  if low:find("looking%s+for%s+active") then return true end
+  if low:find("looking%s+for%s+experienced") then return true end
   if low:find("wir%s+sind") and (low:find("gilde") or low:find("raiden")) then return true end
   return false
 end
@@ -191,6 +282,9 @@ end
 
 function P.classify(raw)
   local low = (raw or ""):lower()
+
+  -- Filtr jezyka: tylko angielski wpada do dalszej klasyfikacji.
+  if not P.isEnglishOnly(raw) then return "NON_ENGLISH" end
 
   if P.isItemSell(low, raw)      then return "ITEM_SELL"       end
   if P.isBoostSell(low)          then return "BOOST_SELL"      end
