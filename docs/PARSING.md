@@ -210,6 +210,23 @@ Faza 1 trzymamy `posted_by = author`, ale dodajemy heurystyke `actual_leader = @
 
 Najwazniejsza i najtrudniejsza czesc. W danych prawie kazdy LFM ma 4-8 kopii (multi-channel + repost).
 
+**Dwa klucze dedup, sprawdzane w kolejnosci:**
+
+1. `msg_normalized` - identyczna lub bardzo podobna tresc (lowered, bez interpunkcji,
+   bez `(N/M)` na koncu, bez `#1` na poczatku, max 100 znakow). Lapie:
+   - multi-channel: ten sam tekst na Trade + Global + LFG.
+   - multi-officer: rozni autorzy z idealnie identycznym tekstem (oficerowie tego
+     samego raidu, np. `Shyyshyy` + `Deodora` + `@memo`).
+2. `(author, raid_name)` - jezeli msg_key nie pasuje, ale ten sam autor juz prowadzi
+   ogloszenie tego samego raidu - merge. Lapie:
+   - autor edytuje tresc (`Need ALL` -> `Need 1 ppal` gdy reszta sie zapelnila).
+   - autor zmienia formatowanie miedzy postami.
+   - dwie wersje tego samego ogloszenia w odstepie minut.
+
+Indeksy `state.by_msg` i `state.by_author_raid` sa aktualizowane przy KAZDYM
+hit/update, wiec nastepne wpisy z dowolna pasujaca trescia LUB tym samym
+(author, raid) trafiaja do tej samej pozycji.
+
 ### 3.1 Multi-channel (ten sam autor, ten sam tekst, +/- 5s)
 
 Z danych: `Shyyshyy` postuje TEN SAM tekst na `Trade-City`, `LookingForGroup`, `Global` w odstepie 0-3 sek.
