@@ -11,8 +11,8 @@ A.NAME = "LFGScanner"
 A.VERSION = "0.1.0"
 
 A.LIFECYCLE = {
-  ACTIVE_MAX_AGE = 5 * 60,
-  INACTIVE_MAX_AGE = 10 * 60,
+  ACTIVE_MAX_AGE = 2 * 60,    -- ponad 2 min ciszy -> wiersz szarzeje (inactive)
+  INACTIVE_MAX_AGE = 5 * 60,  -- ponad 5 min ciszy -> wiersz znika z listy
 }
 
 -- runtime cache (nie persystowany)

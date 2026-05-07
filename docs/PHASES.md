@@ -38,8 +38,8 @@ na podstawie pierwszej probki danych (~2845 wpisow). Kazda nowa porcja moze rozs
    - `first_seen` mierzony od pierwszego wpisu po zalogowaniu gracza obserwujacego (czyli "ile zbiera od kiedy widzimy").
 
 3. **Lifecycle:**
-   - `inactive` (szare) gdy `now - last_seen > 5 min`.
-   - `drop` (usun z tabeli) gdy `now - last_seen > 10 min`.
+   - `inactive` (szare) gdy `now - last_seen > 2 min`.
+   - `drop` (usun z tabeli) gdy `now - last_seen > 5 min`.
 
 4. **UI:**
    - Pływajaca ramka z tabelka (kolumny: raid, size, role, GS req, autor, czas zbierania, status).

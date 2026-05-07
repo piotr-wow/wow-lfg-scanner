@@ -15,7 +15,7 @@ rownolegle z fazą 2 zeby gromadzic dalsze dane.
 
 **Faza 2 (kod gotowy, in-game test pending):** `LFGScanner` - wlasciwy addon z
 tabelka aktywnych raidow, tooltipem pelnego ogloszenia, deduplikacja
-multi-channel/multi-officer, lifecycle inactive=5min/drop=10min, klik = whisper.
+multi-channel/multi-officer, lifecycle inactive=2min/drop=5min, klik = whisper.
 Slash: `/lfg show|hide|toggle|reset|stats|resetpos`.
 
 Dokumentacja:
