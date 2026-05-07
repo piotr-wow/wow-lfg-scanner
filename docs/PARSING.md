@@ -7,12 +7,34 @@ Wszystkie reguly opieraja sie na **realnych wpisach** z `data/samples/ACCOUNT_B/
 
 ```
 chat msg
+  -> 0. lang gate       (NON_ENGLISH -> drop, tylko EN dalej)
   -> 1. classify        (LFM_RAID | GUILD_RECRUIT | BOOST_SELL | ITEM_SELL | ACHIEVEMENT_RUN | DRAMA | OTHER)
   -> 2. extract fields  (raid, size, diff, progress, gs, role_needs, reserves, ach_req, current/max)
   -> 3. dedup           (multi-channel + repost spam + multi-officer co-leadership)
   -> 4. aggregate       (raid bucketed po normalized-msg, first_seen / last_seen)
   -> 5. lifecycle       (active < 5min, inactive 5-10min, drop > 10min)
 ```
+
+## 0. Filtr jezyka (krok 0)
+
+Wpisy nie-angielskie sa odrzucane PRZED klasyfikacja. Sygnaly:
+
+1. **Tagi jezykowe na poczatku/w naglowku**: `[RU]`, `[DE]`, `[BR]`, `[ES]`, `[BALKAN]`, `[SR]`, `[BG]`, `[GE]`, `[FR]`, `[IT]`, `[TR]`, `[PL]`, `[CN]`, `[PT]`, `[GR]`, `[HR]`, `[BS]`.
+2. **Bajty UTF-8 spoza ASCII** - >=5 bajtow `> 127` (cyrylica, polskie/niemieckie/balkanskie diakrytyki: ä ö ü ß č š ć ż ł itd.).
+3. **Slowa-markery**: `wir sind`, `gilde`, `raiden`, `wöchent`, `regrutira`, `igrace`, `igraci`, `aktivne`, `koristimo`, `dopunili`, `rekrutuje`, `rekrutacja`, `szukamy`, `pyc(c)ko/a`, `npurJI`, `koMaH`, `ackoB`, `umpok`.
+4. **Cyrylica zatluszczona ASCII (translit)**: heurystyka per-slowo:
+   - `[a-z][A-Z]` w slowie >=5 znakow (np. `ruJIbgu9l`, `onblmHblx`).
+   - cyfra w srodku slowa: `[A-Za-z]\d[A-Za-z]` (np. `u9eT`, `g9eT`).
+   - 3 lub wiecej kapitalnych w srodku ze slashes/cyframi: `K/\ACCOB!`.
+   - **Prog**: 3+ "podejrzane" slowa w wiadomosci -> non-English.
+
+W praktyce filtr odrzuca:
+- DE recruit gildii (`<Mahlzeit>`).
+- Balkan/SR/HR/BS recruit (`< Balkan Aura > regrutira`).
+- RU translit (`<RES PUBLICA> [RU] ruJIbgu9l npurJIaIIIaeT...`).
+- Polskie/Czeskie/Slowackie wpisy z diakrytykami.
+
+**Limitacja:** nie wykrywa krotkich all-caps cyrylica-translit slow (`BCEX`, `HET`). Polega na tym, ze takie slowa zwykle wystepuja razem z innymi sygnalami w tym samym poscie.
 
 UI fazy 2 dostaje wynik kroku 4-5: lista aktywnych raidow.
 
