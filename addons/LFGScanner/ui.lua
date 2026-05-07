@@ -154,6 +154,46 @@ local function applyBackdrop(frame, alpha)
   frame:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
 end
 
+-- Quick-actions: kliki wysylaja gotowe pytania do autora wpisu (primary_poster).
+-- key  - litera na buttonku
+-- text - tresc wiadomosci wysylanej /w
+-- color - kolor tekstu na buttonku
+-- tip  - tooltip
+UI.ROW_ACTIONS = {
+  { key = "D", text = "discord required?", color = {0.4, 0.8, 1},  tip = "Ask: discord required?" },
+  { key = "R", text = "any reserves?",     color = {1, 0.6, 0.4},  tip = "Ask: any reserves?" },
+  { key = "G", text = "min gs?",           color = {0.5, 1, 0.5},  tip = "Ask: minimum gearscore?" },
+}
+local ACTION_BTN_SIZE = 22
+local ACTION_BTN_GAP = 2
+
+local function makeActionButton(parent, action)
+  local btn = CreateFrame("Button", nil, parent)
+  btn:SetSize(ACTION_BTN_SIZE, ROW_HEIGHT - 2)
+
+  local bg = btn:CreateTexture(nil, "BACKGROUND")
+  bg:SetTexture(0.15, 0.15, 0.2, 0.9)
+  bg:SetAllPoints(btn)
+
+  local border = btn:CreateTexture(nil, "BORDER")
+  border:SetTexture(0.4, 0.4, 0.5, 0.6)
+  border:SetPoint("TOPLEFT", btn, "TOPLEFT", -1, 1)
+  border:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 1, -1)
+
+  local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
+  fs:SetText(action.key)
+  fs:SetTextColor(action.color[1], action.color[2], action.color[3])
+
+  local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+  hl:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+  hl:SetBlendMode("ADD")
+  hl:SetAllPoints(btn)
+
+  btn.action = action
+  return btn
+end
+
 local function makeRow(parent, index)
   local row = CreateFrame("Button", nil, parent)
   row:SetHeight(ROW_HEIGHT)
@@ -168,6 +208,36 @@ local function makeRow(parent, index)
     fs:SetText("")
     row.cells[col.key] = fs
     x = x + col.width
+  end
+
+  -- Quick-action buttons (right-anchored). Iterujemy od konca tablicy zeby
+  -- pierwsza akcja w UI.ROW_ACTIONS byla najbardziej na LEWO (czytanie D-R-G).
+  row.actionBtns = {}
+  local prev = nil
+  for i = #UI.ROW_ACTIONS, 1, -1 do
+    local action = UI.ROW_ACTIONS[i]
+    local btn = makeActionButton(row, action)
+    if prev then
+      btn:SetPoint("RIGHT", prev, "LEFT", -ACTION_BTN_GAP, 0)
+    else
+      btn:SetPoint("RIGHT", row, "RIGHT", -PADDING, 0)
+    end
+    btn:SetScript("OnClick", function(self)
+      local r = row.raid
+      if not r or not r.primary_poster then return end
+      SendChatMessage(self.action.text, "WHISPER", nil, r.primary_poster)
+      A.print(("Sent to %s: %s"):format(r.primary_poster, self.action.text))
+    end)
+    btn:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_TOP")
+      GameTooltip:AddLine(self.action.tip, 1, 1, 1)
+      local target = (row.raid and row.raid.primary_poster) or "?"
+      GameTooltip:AddLine("/w " .. target .. " " .. self.action.text, 0.7, 0.7, 0.7)
+      GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    table.insert(row.actionBtns, btn)
+    prev = btn
   end
   -- Highlight przy hover
   local hl = row:CreateTexture(nil, "HIGHLIGHT")
@@ -237,7 +307,7 @@ function UI.Init()
   f:SetFrameStrata("MEDIUM")
   f:SetMovable(true)
   f:SetResizable(true)
-  f:SetMinResize(620, 160)
+  f:SetMinResize(720, 160)
   f:SetClampedToScreen(true)
   f:EnableMouse(true)
   applyBackdrop(f, 0.88)

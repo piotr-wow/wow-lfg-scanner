@@ -27,7 +27,7 @@ A.state = {
 A.DB_DEFAULTS = {
   meta = { version = 1 },
   ui = {
-    point = "CENTER", rel_x = 0, rel_y = 0, width = 720, height = 360, shown = true,
+    point = "CENTER", rel_x = 0, rel_y = 0, width = 820, height = 360, shown = true,
     selected_tab = "ALL",
   },
   filters = {
