@@ -23,12 +23,15 @@ ktory kopiuje wszystkie znalezione pliki do `data/samples/<ACC>/`.
 
 **Cel:** zywa tabelka aktywnych raidow.
 
+**Heurystyki sa juz spisane** w [PARSING.md](PARSING.md) i [sample-postings.md](sample-postings.md)
+na podstawie pierwszej probki danych (~2845 wpisow). Kazda nowa porcja moze rozszerzyc slowniki.
+
 **Bloki do zbudowania:**
 
 1. **Parser ogloszenia** (czysta funkcja Lua, testowalna):
    - input: tresc wiadomosci + autor.
-   - output: `{ raid_name, raid_size, role_needs = {tank=1, heal=2, dps=3}, reserves = {...}, achievement_required = "...", gs_required = ..., raw }`.
-   - heurystyki ustalimy patrzac na zebrane dane z fazy 1 (skroty w PL/EN, "LFM", "need", "selling", "wts", "boost"...).
+   - output: struktura `ActiveRaid` (patrz PARSING.md sekcja 4).
+   - testy: oczekiwana ekstrakcja dla przykladow z `sample-postings.md`.
 
 2. **Aggregator** trzyma `active_raids[author] = { ...parsed, first_seen, last_seen, posts = N }`.
    - Jezeli ten sam autor wpisuje ponownie -> aktualizuj `last_seen`, ewentualnie merguj informacje (rosnaca lista potrzebnych rol).
