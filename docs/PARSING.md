@@ -12,7 +12,7 @@ chat msg
   -> 2. extract fields  (raid, size, diff, progress, gs, role_needs, reserves, ach_req, current/max)
   -> 3. dedup           (multi-channel + repost spam + multi-officer co-leadership)
   -> 4. aggregate       (raid bucketed po normalized-msg, first_seen / last_seen)
-  -> 5. lifecycle       (active < 5min, inactive 5-10min, drop > 10min)
+  -> 5. lifecycle       (active < 2min, inactive 2-5min, drop > 5min)
 ```
 
 ## 0. Filtr jezyka (krok 0)
@@ -311,9 +311,9 @@ ActiveRaid = {
 
 ## 5. Lifecycle
 
-- `active`: `now - last_seen <= 5*60`.
-- `inactive` (szare w tabeli, nie usuwane): `5*60 < now - last_seen <= 10*60`.
-- `drop` (znika): `now - last_seen > 10*60`.
+- `active`: `now - last_seen <= 2*60`.
+- `inactive` (szare w tabeli, nie usuwane): `2*60 < now - last_seen <= 5*60`.
+- `drop` (znika): `now - last_seen > 5*60`.
 
 Liczone od **last_seen** (najpozniejszy wpis), nie od `first_seen`.
 
