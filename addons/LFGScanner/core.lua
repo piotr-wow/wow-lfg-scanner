@@ -17,9 +17,10 @@ A.LIFECYCLE = {
 
 -- runtime cache (nie persystowany)
 A.state = {
-  raids = {},      -- aggregator: id -> ActiveRaid
-  by_msg = {},     -- msg_normalized -> id (do dedup)
-  login_time = 0,  -- ustawiane w PLAYER_LOGIN
+  raids = {},            -- aggregator: id -> ActiveRaid
+  by_msg = {},           -- msg_normalized -> id (dedup multi-officer)
+  by_author_raid = {},   -- "author|raid" -> id (dedup tego samego autora ewoluujacego LFM)
+  login_time = 0,        -- ustawiane w PLAYER_LOGIN
 }
 
 -- defaulty SavedVariables

@@ -35,15 +35,27 @@ end
 function AG.ingest(parsed, channel, t)
   if not parsed or parsed.class ~= "LFM_RAID" then return nil end
 
-  local key = parsed.msg_normalized
-  if not key or key == "" then return nil end
+  local msg_key = parsed.msg_normalized
+  if not msg_key or msg_key == "" then return nil end
 
-  local id = A.state.by_msg[key]
+  -- 1. Multi-officer / repost: identyczna wiadomosc -> ten sam raid.
+  local id = A.state.by_msg[msg_key]
   if id and A.state.raids[id] then
     return AG.update(A.state.raids[id], parsed, channel, t)
   end
 
-  return AG.create(key, parsed, channel, t)
+  -- 2. Ten sam autor + ten sam raid (np. tresc ewoluuje gdy zapelniaja sie role)
+  --    -> ten sam raid, mergujemy.
+  if parsed.author and parsed.raid and parsed.raid ~= "?" then
+    local ar_key = parsed.author .. "|" .. parsed.raid
+    local ar_id = A.state.by_author_raid[ar_key]
+    if ar_id and A.state.raids[ar_id] then
+      return AG.update(A.state.raids[ar_id], parsed, channel, t)
+    end
+  end
+
+  -- 3. Nowy raid.
+  return AG.create(msg_key, parsed, channel, t)
 end
 
 function AG.create(key, parsed, channel, t)
@@ -78,6 +90,9 @@ function AG.create(key, parsed, channel, t)
 
   A.state.raids[id] = raid
   A.state.by_msg[key] = id
+  if parsed.author and parsed.raid and parsed.raid ~= "?" then
+    A.state.by_author_raid[parsed.author .. "|" .. parsed.raid] = id
+  end
   return raid
 end
 
@@ -86,6 +101,15 @@ function AG.update(raid, parsed, channel, t)
   raid.posts_count = (raid.posts_count or 0) + 1
   if parsed.author then raid.posters[parsed.author] = true end
   if channel then raid.channels[channel] = true end
+
+  -- Zarejestruj nowy msg_normalized i (author|raid) do tego samego raida,
+  -- zeby nastepne wpisy z taka sama trescia / od tego autora trafialy tu.
+  if parsed.msg_normalized and parsed.msg_normalized ~= "" then
+    A.state.by_msg[parsed.msg_normalized] = raid.id
+  end
+  if parsed.author and parsed.raid and parsed.raid ~= "?" then
+    A.state.by_author_raid[parsed.author .. "|" .. parsed.raid] = raid.id
+  end
 
   -- Aktualizuj zmienialne pola (ktos moze zmienic GS/role/current/max w kolejnym wpisie).
   if parsed.current then raid.current_in_group = parsed.current end
@@ -115,7 +139,13 @@ function AG.tick(now)
     local age = now - (raid.last_seen or now)
     if age > inactive_max then
       A.state.raids[id] = nil
-      A.state.by_msg[raid.id] = nil
+      -- Wyczysc wszystkie indeksy wskazujace na ten id
+      for k, v in pairs(A.state.by_msg) do
+        if v == id then A.state.by_msg[k] = nil end
+      end
+      for k, v in pairs(A.state.by_author_raid) do
+        if v == id then A.state.by_author_raid[k] = nil end
+      end
       table.insert(removed, id)
     elseif age > active_max then
       raid.status = "inactive"
@@ -147,6 +177,7 @@ end
 function AG.reset()
   A.state.raids = {}
   A.state.by_msg = {}
+  A.state.by_author_raid = {}
 end
 
 function AG.count()
