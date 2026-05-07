@@ -76,16 +76,24 @@ frame:SetScript("OnEvent", function(self, event, ...)
 end)
 
 -- =============================================================
--- Periodic tick (lifecycle)
+-- Periodic tick (lifecycle + UI age refresh)
 -- =============================================================
 
-local TICK_INTERVAL = 5.0
-local elapsed_acc = 0
+local LIFECYCLE_INTERVAL = 5.0  -- AG.tick: status active/inactive/drop
+local UI_REFRESH_INTERVAL = 1.0 -- UI.Refresh: kolumna Age + status alpha
+local lifecycle_acc, refresh_acc = 0, 0
+
 frame:SetScript("OnUpdate", function(self, elapsed)
-  elapsed_acc = elapsed_acc + elapsed
-  if elapsed_acc >= TICK_INTERVAL then
-    elapsed_acc = 0
+  lifecycle_acc = lifecycle_acc + elapsed
+  refresh_acc = refresh_acc + elapsed
+
+  if lifecycle_acc >= LIFECYCLE_INTERVAL then
+    lifecycle_acc = 0
     AG.tick(A.now())
+  end
+
+  if refresh_acc >= UI_REFRESH_INTERVAL then
+    refresh_acc = 0
     if UI.frame and UI.frame:IsShown() then
       UI.Refresh()
     end
