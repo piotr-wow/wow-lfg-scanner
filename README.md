@@ -15,7 +15,11 @@ SavedVariables, zeby na realnych danych ustalic regexy/heurystyki dla parsera.
 **Faza 2 (planowana):** `LFGScanner` - wlasciwy addon z tabelka, tooltipem
 pelnego ogloszenia, timeoutami inactive=5min, drop=10min.
 
-Patrz [docs/PHASES.md](docs/PHASES.md) i [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Dokumentacja:
+- [docs/PHASES.md](docs/PHASES.md) - fazy projektu.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - layout i decyzje techniczne.
+- [docs/PARSING.md](docs/PARSING.md) - heurystyki klasyfikacji i ekstrakcji LFM (na bazie realnych danych).
+- [docs/sample-postings.md](docs/sample-postings.md) - reprezentatywne przyklady z anotacja, sluza jako referencja testow parsera.
 
 ## Sciezki klienta WoW (lokalnie)
 
