@@ -164,7 +164,12 @@ function AG.tick(now)
   return removed
 end
 
--- Pobierz liste do UI - posortowana po last_seen DESC, wedlug filtrow.
+-- Pobierz liste do UI - posortowana stabilnie po `first_seen` ASC.
+-- Nie sortujemy po `last_seen`, bo wtedy kazdy repost tego samego ogloszenia
+-- wyrzucalby raid na gore i wszystkie inne pozycje skakaly w dol - user
+-- traci target pod kursorem. `first_seen` jest stale przez cale zycie raidu,
+-- wiec pozycja nie zmienia sie przy update'ach. Nowe raidy wpadaja na koniec
+-- listy, nic istniejacego nie przesuwa sie w gore.
 function AG.list(filters)
   filters = filters or {}
   local out = {}
@@ -174,10 +179,9 @@ function AG.list(filters)
     end
   end
   table.sort(out, function(a, b)
-    if a.status ~= b.status then
-      return a.status == "active"  -- active na gorze
-    end
-    return (a.last_seen or 0) > (b.last_seen or 0)
+    local fa, fb = a.first_seen or 0, b.first_seen or 0
+    if fa ~= fb then return fa < fb end
+    return (a.id or "") < (b.id or "")  -- tie-break: stabilny po id
   end)
   return out
 end
