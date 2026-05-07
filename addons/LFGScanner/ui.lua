@@ -101,7 +101,9 @@ local function fmtGroup(raid)
 end
 
 local function fmtAge(raid, now)
-  return A.formatAge(now - (raid.first_seen or now))
+  -- "Age" = ile czasu minelo od OSTATNIEGO posta. Resetuje sie przy kazdym
+  -- repost - rosnaca wartosc oznacza, ze poster milczy (zaraz inactive / drop).
+  return A.formatAge(now - (raid.last_seen or now))
 end
 
 local function fmtPoster(raid)
