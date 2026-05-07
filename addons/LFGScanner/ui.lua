@@ -13,8 +13,11 @@ local UI = A.UI
 local ROW_HEIGHT = 18
 local HEADER_HEIGHT = 22
 local TITLEBAR_HEIGHT = 22
+local TABBAR_HEIGHT = 22
 local STATUSBAR_HEIGHT = 18
 local PADDING = 6
+local TAB_WIDTH = 64
+local TAB_GAP = 2
 
 -- Ukladamy kolumny: { key, header, width }
 UI.COLUMNS = {
@@ -27,6 +30,31 @@ UI.COLUMNS = {
   { key = "poster",   header = "Poster", width = 120 },
   { key = "extras",   header = "+",      width = 40 },  -- ach + reserves icons
 }
+
+-- Grupy raidow na zakladkach. "ALL" = bez filtra. "OTHER" = wszystko nie pasujace
+-- do zadnej innej grupy.
+UI.RAID_GROUPS = {
+  { id = "ALL",   label = "All" },
+  { id = "ICC25", label = "ICC25", raids = { ICC25 = true, ICC25HC = true } },
+  { id = "ICC10", label = "ICC10", raids = { ICC10 = true, ICC10HC = true } },
+  { id = "TOC25", label = "TOC25", raids = { TOC25 = true, TOC25HC = true, TOGC25 = true } },
+  { id = "TOC10", label = "TOC10", raids = { TOC10 = true, TOC10HC = true, TOGC10 = true } },
+  { id = "RS25",  label = "RS25",  raids = { RS25 = true, RS25HC = true } },
+  { id = "RS10",  label = "RS10",  raids = { RS10 = true, RS10HC = true } },
+  { id = "VOA",   label = "VOA",   raids = { VOA25 = true, VOA10 = true } },
+  { id = "OTHER", label = "Other" },
+}
+
+local function groupMatches(group, raid_name)
+  if group.id == "ALL" then return true end
+  if group.id == "OTHER" then
+    for _, g in ipairs(UI.RAID_GROUPS) do
+      if g.raids and g.raids[raid_name] then return false end
+    end
+    return true
+  end
+  return (group.raids and group.raids[raid_name]) and true or false
+end
 
 local function colorize(text, r, g, b)
   return string.format("|cff%02x%02x%02x%s|r",
@@ -196,7 +224,7 @@ function UI.Init()
   f:SetFrameStrata("MEDIUM")
   f:SetMovable(true)
   f:SetResizable(true)
-  f:SetMinResize(420, 160)
+  f:SetMinResize(620, 160)
   f:SetClampedToScreen(true)
   f:EnableMouse(true)
   applyBackdrop(f, 0.88)
@@ -248,10 +276,49 @@ function UI.Init()
     UI.Refresh()
   end)
 
-  -- Header tabeli
+  -- Tab bar
+  local tabBar = CreateFrame("Frame", nil, f)
+  tabBar:SetHeight(TABBAR_HEIGHT)
+  tabBar:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, 0)
+  tabBar:SetPoint("TOPRIGHT", title, "BOTTOMRIGHT", 0, 0)
+  f.tabBar = tabBar
+  f.tabButtons = {}
+
+  local x = PADDING
+  for _, group in ipairs(UI.RAID_GROUPS) do
+    local btn = CreateFrame("Button", nil, tabBar)
+    btn:SetSize(TAB_WIDTH, TABBAR_HEIGHT - 4)
+    btn:SetPoint("LEFT", tabBar, "LEFT", x, 0)
+
+    local bg = btn:CreateTexture(nil, "BACKGROUND")
+    bg:SetTexture(0.25, 0.35, 0.6, 0.7)
+    bg:SetAllPoints(btn)
+    bg:Hide()
+    btn.bg = bg
+
+    local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    fs:SetText(group.label)
+    btn.label = fs
+    btn.group = group
+
+    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetTexture("Interface\\Buttons\\UI-Common-MouseHilight")
+    hl:SetBlendMode("ADD")
+    hl:SetAllPoints(btn)
+
+    btn:SetScript("OnClick", function(self)
+      UI.SelectTab(self.group.id)
+    end)
+
+    f.tabButtons[group.id] = btn
+    x = x + TAB_WIDTH + TAB_GAP
+  end
+
+  -- Header tabeli (pod tab barem)
   local header = makeHeader(f)
-  header:SetPoint("TOPLEFT", title, "BOTTOMLEFT", PADDING, -2)
-  header:SetPoint("TOPRIGHT", title, "BOTTOMRIGHT", -PADDING, -2)
+  header:SetPoint("TOPLEFT", tabBar, "BOTTOMLEFT", PADDING, -2)
+  header:SetPoint("TOPRIGHT", tabBar, "BOTTOMRIGHT", -PADDING, -2)
   f.header = header
 
   -- Wiersze - bedziemy tworzyc dynamicznie zaleznie od wysokosci
@@ -260,6 +327,11 @@ function UI.Init()
 
   UI.RestoreLayout()
   return f
+end
+
+function UI.SelectTab(id)
+  if A.db then A.db.ui.selected_tab = id end
+  UI.Refresh()
 end
 
 local function ensureRows(count)
@@ -283,11 +355,45 @@ function UI.Refresh()
   local f = UI.frame
   local now = A.now()
 
-  local raids = A.Aggregator.list({ hide_inactive = false })
+  local all_raids = A.Aggregator.list({ hide_inactive = false })
   local total = A.Aggregator.count()
+  local selected_id = (A.db and A.db.ui.selected_tab) or "ALL"
+
+  -- Aktualizuj liczniki na zakladkach + podswietl aktywna
+  local selected_group = nil
+  for _, group in ipairs(UI.RAID_GROUPS) do
+    local count = 0
+    for _, r in ipairs(all_raids) do
+      if groupMatches(group, r.raid) then count = count + 1 end
+    end
+    local btn = f.tabButtons[group.id]
+    if btn then
+      local lbl = (count > 0) and (group.label .. " (" .. count .. ")") or group.label
+      btn.label:SetText(lbl)
+      if group.id == selected_id then
+        btn.bg:Show()
+        btn.label:SetTextColor(1, 0.82, 0)
+        selected_group = group
+      else
+        btn.bg:Hide()
+        btn.label:SetTextColor(0.75, 0.75, 0.75)
+      end
+    end
+  end
+
+  -- Filtruj po wybranej zakladce
+  local raids
+  if not selected_group or selected_group.id == "ALL" then
+    raids = all_raids
+  else
+    raids = {}
+    for _, r in ipairs(all_raids) do
+      if groupMatches(selected_group, r.raid) then table.insert(raids, r) end
+    end
+  end
 
   -- Ile wierszy zmiesci sie w aktualnej wysokosci
-  local available_height = f:GetHeight() - TITLEBAR_HEIGHT - HEADER_HEIGHT - STATUSBAR_HEIGHT - 4
+  local available_height = f:GetHeight() - TITLEBAR_HEIGHT - TABBAR_HEIGHT - HEADER_HEIGHT - STATUSBAR_HEIGHT - 4
   local row_count = math.max(1, math.floor(available_height / ROW_HEIGHT))
   ensureRows(row_count)
 
@@ -312,7 +418,8 @@ function UI.Refresh()
   for _, raid in pairs(A.state.raids) do
     if raid.status == "active" then active_n = active_n + 1 end
   end
-  f.statusText:SetText(string.format("%d active / %d total", active_n, total))
+  f.statusText:SetText(string.format("%s: %d shown / %d active / %d total",
+    selected_id, #raids, active_n, total))
 end
 
 function UI.Show()
