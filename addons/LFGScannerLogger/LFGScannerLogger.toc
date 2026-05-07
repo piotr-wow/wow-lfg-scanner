@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: LFG Chat Logger
+## Notes: Logs general/global chat messages for raid recruitment analysis
+## Author: piotr
+## Version: 0.1.0
+## SavedVariables: LFGScannerLoggerDB
+
+LFGScannerLogger.lua
