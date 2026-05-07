@@ -104,7 +104,10 @@ local function fmtAge(raid, now)
 end
 
 local function fmtPoster(raid)
-  return raid.actual_leader or raid.primary_poster or "?"
+  -- Pokazujemy AUTORA wpisu (primary_poster) - to gwarantowany nick gracza.
+  -- raid.actual_leader (z @nick w tresci) to czesto alias/pseudonim, nie da sie
+  -- do niego /w. Trafia tylko do tooltipa jako "Leader (@)".
+  return raid.primary_poster or "?"
 end
 
 local function fmtExtras(raid)
@@ -191,7 +194,8 @@ local function makeRow(parent, index)
   row:SetScript("OnClick", function(self, button)
     if not self.raid then return end
     if button == "LeftButton" then
-      local target = self.raid.actual_leader or self.raid.primary_poster
+      -- /w idzie do AUTORA wpisu, nie do @nick z tresci (czesto alias).
+      local target = self.raid.primary_poster
       if target then
         ChatFrame_OpenChat("/w " .. target .. " ")
       end
