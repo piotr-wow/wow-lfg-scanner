@@ -181,6 +181,32 @@ Jednoliterowe oznaczenia w ICC25:
 - `has_reserves = true`
 - pojedyncze tokeny na liscie `reserves_tokens = ["B", "P", "DBW"]` jezeli kiedys bedziemy chcieli kolorowac.
 
+### 2.6b Status Discord (`discord_status`)
+
+Trzy stany: `required` / `not_required` / `unknown`.
+
+**Eksplicytnie WYMAGANE** (ma silne sygnaly):
+- `Discord Mandatory`, `Discord required`, `Discord req`, `Discord must`, `Discord a must`
+- `must have Discord`, `must join Discord`
+- `Voice req`, `Voice mandatory`, `must have voice`, `voice chat req`
+
+**Eksplicytnie NIE WYMAGANE**:
+- `no discord`, `without discord`, `don't need discord`
+- `no voice`, `no mic`
+- `silent run`, `silent raid`
+
+**Wymagane (implicit)** - link do serwera Discord lub wzmianka oznacza zwykle, ze
+trzeba dolaczyc do serwera zeby dostac inv:
+- `discord.gg/...`, `discord.com/...`
+- `using discord`, `on discord`
+- samo slowo `discord` / `disc` w kontekscie LFM (osobne, otoczone whitespace)
+
+**Unknown** - brak wzmianki.
+
+W aggregatorze: `unknown` z nowego wpisu nie nadpisuje wczesniejszego konkretu.
+Jezeli pierwszy post mowil "Discord required" a drugi nic nie mowi o discord,
+status zostaje `required`.
+
 ### 2.7 Achievement requirement (`ach_req`)
 
 Trzy formy:

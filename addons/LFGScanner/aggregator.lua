@@ -72,6 +72,7 @@ function AG.create(key, parsed, channel, t)
     reserves_raw = parsed.reserves_raw,
     reserves_tokens = deepcopy(parsed.reserves_tokens or {}),
     ach_req = deepcopy(parsed.ach_req or {}),
+    discord_status = parsed.discord_status or "unknown",
     current_in_group = parsed.current,
     max_in_group = parsed.max,
     posters = {},
@@ -121,6 +122,13 @@ function AG.update(raid, parsed, channel, t)
     raid.reserves_tokens = deepcopy(parsed.reserves_tokens or {})
   end
   if parsed.ach_req then raid.ach_req = deepcopy(parsed.ach_req) end
+  if parsed.discord_status and parsed.discord_status ~= "unknown" then
+    -- Aktualizuj tylko jezeli mamy nowa konkretna informacje (req lub not_req).
+    -- "unknown" w nowym wpisie nie nadpisuje wczesniejszej pewnej wiedzy.
+    raid.discord_status = parsed.discord_status
+  elseif raid.discord_status == nil then
+    raid.discord_status = parsed.discord_status or "unknown"
+  end
   if parsed.actual_leader and not raid.actual_leader then
     raid.actual_leader = parsed.actual_leader
   end

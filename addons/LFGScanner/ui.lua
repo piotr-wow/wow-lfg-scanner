@@ -24,6 +24,7 @@ UI.COLUMNS = {
   { key = "raid",     header = "Raid",   width = 80 },
   { key = "progress", header = "Prog",   width = 60 },
   { key = "gs",       header = "GS",     width = 50 },
+  { key = "disc",     header = "Disc",   width = 40 },
   { key = "needs",    header = "Needs",  width = 110 },
   { key = "group",    header = "Group",  width = 50 },
   { key = "age",      header = "Age",    width = 50 },
@@ -117,10 +118,18 @@ local function fmtExtras(raid)
   return s
 end
 
+local function fmtDisc(raid)
+  local d = raid.discord_status or "unknown"
+  if d == "required"     then return colorize("YES", 0.4, 1, 0.4) end
+  if d == "not_required" then return colorize("NO",  1, 0.4, 0.4) end
+  return colorize("?",   0.6, 0.6, 0.6)
+end
+
 local function rowText(raid, key, now)
   if key == "raid"     then return raid.raid or "?" end
   if key == "progress" then return fmtProgress(raid.progress, raid.difficulty) end
   if key == "gs"       then return fmtGS(raid.gs_min, raid.gs_strict) end
+  if key == "disc"     then return fmtDisc(raid) end
   if key == "needs"    then return fmtRoles(raid.role_needs) end
   if key == "group"    then return fmtGroup(raid) end
   if key == "age"      then return fmtAge(raid, now) end
