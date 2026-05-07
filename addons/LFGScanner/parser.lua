@@ -167,15 +167,15 @@ end
 
 function P.looksLikeTranslitWord(word)
   -- Cyrylica zatluszczona ASCII charakteryzuje sie:
-  -- - mieszanymi kapitalami: "JIb", "BO", "yI", "OB"
-  -- - cyfra w srodku slowa: "9l", "g9eT", "u9eT"
-  -- - ciagi 2+ kapitalnych nie na poczatku: "BCEX", "K/\ACCOB"
+  -- - cyfra w srodku slowa miedzy literami: "u9eT", "g9eT", "p9gbI"
+  -- - male potem duze w >=5-znakowym slowie: "ruJI", "npurJI", "onblmHblx"
+  --
+  -- Nie uzywamy juz reguly "[A-Z][A-Z][A-Z] z dziwnymi znakami" - falszywie
+  -- flagowala typowe LFM-owe tokeny: ICC25HC, RS25HC, (B+P+SFS, RES),
+  -- GS+SPEC, B+O+P. Skutkiem byly LFM klasyfikowane jako NON_ENGLISH.
   if word:len() < 4 then return false end
-  if word:match("[a-z][A-Z][A-Z]") then return true end       -- npurJI
-  if word:match("[A-Za-z]%d[A-Za-z]") then return true end    -- u9eT, g9eT
-  if word:match("[A-Z][A-Z][A-Z]") and not word:match("^[A-Z][A-Z][A-Z]+$") then
-    return true                                                 -- BCEX wewnatrz
-  end
+  if word:match("[A-Za-z]%d[A-Za-z]") then return true end
+  if word:len() >= 5 and word:match("[a-z][A-Z]") then return true end
   return false
 end
 
