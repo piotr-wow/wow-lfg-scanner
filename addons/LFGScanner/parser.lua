@@ -17,6 +17,11 @@ local P = A.Parser
 -- Raid patterns. Order matters: longer / more specific first.
 -- { lua_pattern, normalized_name, size, default_difficulty }
 P.RAID_PATTERNS = {
+  -- ICC reverse-order ("10man ICC", "25 ICC") - must come before bare icc patterns
+  { "10%s*man%s*icc",    "ICC10",   10, "NM" },
+  { "25%s*man%s*icc",    "ICC25",   25, "NM" },
+  { "10%s+icc",          "ICC10",   10, "NM" },
+  { "25%s+icc",          "ICC25",   25, "NM" },
   -- ICC (most common)
   { "icc%s*25%s*hc",     "ICC25HC", 25, "HC" },
   { "icc%-25%-hc",       "ICC25HC", 25, "HC" },
@@ -59,6 +64,7 @@ P.RAID_PATTERNS = {
   { "voa10",             "VOA10",   10, "NM" },
   { "voa",               "VOA25",   25, "NM" },
   -- Others
+  { "ulduar%s*10",       "ULDUAR10", 10, "NM" },
   { "ulduar%s*25",       "ULDUAR",  25, "NM" },
   { "ulduar",            "ULDUAR",  25, "NM" },
   { "naxx",              "NAXX",    25, "NM" },
@@ -94,6 +100,7 @@ P.NEGATIVE_PATTERNS = {
 -- Positive signals for LFM_RAID.
 P.POSITIVE_PATTERNS = {
   "^lfm[%s%-#]", "^#lfm", "%slfm[%s%-]", "^lfm$",
+  "^#%d",                           -- "#2 ICC25 8/12HC ...", "#2LFM TOC ..."
   "^lf%s",                          -- "LF tank", "LF healer"
   "%(%d+/%d+%)",                    -- (21/25)
   "/w%s+me", "pst%s+me", "pst%s+for", "whisper%s+me",
@@ -267,6 +274,7 @@ function P.isAchievementRun(low, raw)
     -- achievement is a requirement.
     if low:find("%(%d+/%d+%)") then return false end
     if low:find("^lfm") or low:find("%slfm%s") then return false end
+    if low:find("^#%d") or low:find("#%d+lfm") then return false end
     return true
   end
   return false
