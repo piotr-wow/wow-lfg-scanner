@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Zbiera pliki LFGScannerLogger.lua ze wszystkich kont w WTF/Account/* do data/samples/<ACCOUNT>/.
-# Domyslnie skanuje wszystkie konta. Mozesz tez podac konkretne nazwy.
-# Uzycie:
-#   ./scripts/collect-logs.sh                     # wszystkie konta
-#   ./scripts/collect-logs.sh ACCOUNT_A ACCOUNT_B     # tylko te
-#   WOW_DIR=/inna/sciezka ./scripts/collect-logs.sh
+# Collects LFGScannerLogger.lua files from every account in WTF/Account/* into data/samples/<ACCOUNT>/.
+# By default scans all accounts. Specific names can be passed in.
+# Usage:
+#   ./scripts/collect-logs.sh                     # all accounts
+#   ./scripts/collect-logs.sh ACCOUNT_A ACCOUNT_B     # just those
+#   WOW_DIR=/other/path ./scripts/collect-logs.sh
 
 set -euo pipefail
 

@@ -1,7 +1,7 @@
 --[[
   LFGScanner.Aggregator
-  Trzyma stan aktywnych raidow. Zbiera parsed messages, dedupuje,
-  obsluguje lifecycle (active < 5min, inactive < 10min, drop).
+  Holds the active-raid state. Ingests parsed messages, deduplicates them,
+  drives the lifecycle (active < 2min, inactive < 5min, drop).
 ]]
 
 LFGScanner = LFGScanner or {}
@@ -10,7 +10,7 @@ A.Aggregator = A.Aggregator or {}
 local AG = A.Aggregator
 
 -- =============================================================
--- Pomocnicze
+-- Helpers
 -- =============================================================
 
 local function deepcopy(t)
@@ -28,9 +28,9 @@ end
 -- API
 -- =============================================================
 
--- Wstaw / zaktualizuj raid na podstawie wyniku parsera.
--- parsed: tabela z LFGScanner.Parser.parse(...)
--- channel: nazwa kanalu na ktorym wyladowala wiadomosc
+-- Insert / update a raid given the parser output.
+-- parsed: table from LFGScanner.Parser.parse(...)
+-- channel: name of the channel the message arrived on
 -- t: epoch
 function AG.ingest(parsed, channel, t)
   if not parsed or parsed.class ~= "LFM_RAID" then return nil end
@@ -38,14 +38,14 @@ function AG.ingest(parsed, channel, t)
   local msg_key = parsed.msg_normalized
   if not msg_key or msg_key == "" then return nil end
 
-  -- 1. Multi-officer / repost: identyczna wiadomosc -> ten sam raid.
+  -- 1. Multi-officer / repost: identical message -> same raid.
   local id = A.state.by_msg[msg_key]
   if id and A.state.raids[id] then
     return AG.update(A.state.raids[id], parsed, channel, t)
   end
 
-  -- 2. Ten sam autor + ten sam raid (np. tresc ewoluuje gdy zapelniaja sie role)
-  --    -> ten sam raid, mergujemy.
+  -- 2. Same author + same raid (e.g. body evolves as roles fill in)
+  --    -> same raid, merge.
   if parsed.author and parsed.raid and parsed.raid ~= "?" then
     local ar_key = parsed.author .. "|" .. parsed.raid
     local ar_id = A.state.by_author_raid[ar_key]
@@ -54,12 +54,12 @@ function AG.ingest(parsed, channel, t)
     end
   end
 
-  -- 3. Nowy raid.
+  -- 3. New raid.
   return AG.create(msg_key, parsed, channel, t)
 end
 
 function AG.create(key, parsed, channel, t)
-  local id = key  -- jak narazie id = znormalizowana wiadomosc, prosto
+  local id = key  -- for now id = normalized message, kept simple
   local raid = {
     id = id,
     raid = parsed.raid,
@@ -103,8 +103,8 @@ function AG.update(raid, parsed, channel, t)
   if parsed.author then raid.posters[parsed.author] = true end
   if channel then raid.channels[channel] = true end
 
-  -- Zarejestruj nowy msg_normalized i (author|raid) do tego samego raida,
-  -- zeby nastepne wpisy z taka sama trescia / od tego autora trafialy tu.
+  -- Register the new msg_normalized and (author|raid) against this same raid,
+  -- so subsequent entries with that body / from that author land here.
   if parsed.msg_normalized and parsed.msg_normalized ~= "" then
     A.state.by_msg[parsed.msg_normalized] = raid.id
   end
@@ -112,7 +112,7 @@ function AG.update(raid, parsed, channel, t)
     A.state.by_author_raid[parsed.author .. "|" .. parsed.raid] = raid.id
   end
 
-  -- Aktualizuj zmienialne pola (ktos moze zmienic GS/role/current/max w kolejnym wpisie).
+  -- Update mutable fields (someone may change GS/role/current/max in a later post).
   if parsed.current then raid.current_in_group = parsed.current end
   if parsed.max then raid.max_in_group = parsed.max end
   if parsed.role_needs then raid.role_needs = deepcopy(parsed.role_needs) end
@@ -123,8 +123,8 @@ function AG.update(raid, parsed, channel, t)
   end
   if parsed.ach_req then raid.ach_req = deepcopy(parsed.ach_req) end
   if parsed.discord_status and parsed.discord_status ~= "unknown" then
-    -- Aktualizuj tylko jezeli mamy nowa konkretna informacje (req lub not_req).
-    -- "unknown" w nowym wpisie nie nadpisuje wczesniejszej pewnej wiedzy.
+    -- Update only if we have a new concrete value (req or not_req).
+    -- "unknown" in a new entry must not overwrite a prior known state.
     raid.discord_status = parsed.discord_status
   elseif raid.discord_status == nil then
     raid.discord_status = parsed.discord_status or "unknown"
@@ -137,7 +137,7 @@ function AG.update(raid, parsed, channel, t)
   return raid
 end
 
--- Lifecycle tick. Wywolywany co kilka sekund.
+-- Lifecycle tick. Called every few seconds.
 function AG.tick(now)
   local removed = {}
   local active_max = A.LIFECYCLE.ACTIVE_MAX_AGE
@@ -147,7 +147,7 @@ function AG.tick(now)
     local age = now - (raid.last_seen or now)
     if age > inactive_max then
       A.state.raids[id] = nil
-      -- Wyczysc wszystkie indeksy wskazujace na ten id
+      -- Clear every index pointing at this id
       for k, v in pairs(A.state.by_msg) do
         if v == id then A.state.by_msg[k] = nil end
       end
@@ -164,12 +164,12 @@ function AG.tick(now)
   return removed
 end
 
--- Pobierz liste do UI - posortowana stabilnie po `first_seen` ASC.
--- Nie sortujemy po `last_seen`, bo wtedy kazdy repost tego samego ogloszenia
--- wyrzucalby raid na gore i wszystkie inne pozycje skakaly w dol - user
--- traci target pod kursorem. `first_seen` jest stale przez cale zycie raidu,
--- wiec pozycja nie zmienia sie przy update'ach. Nowe raidy wpadaja na koniec
--- listy, nic istniejacego nie przesuwa sie w gore.
+-- Build the UI list - sorted stably by `first_seen` ASC.
+-- We do not sort by `last_seen` because then every repost of the same posting
+-- would bump the raid to the top and shift every other row down - the user
+-- loses their target under the cursor. `first_seen` is stable for the entire
+-- life of the raid, so the position doesn't change on updates. New raids land
+-- at the bottom; nothing existing slides upward.
 function AG.list(filters)
   filters = filters or {}
   local out = {}
@@ -181,7 +181,7 @@ function AG.list(filters)
   table.sort(out, function(a, b)
     local fa, fb = a.first_seen or 0, b.first_seen or 0
     if fa ~= fb then return fa < fb end
-    return (a.id or "") < (b.id or "")  -- tie-break: stabilny po id
+    return (a.id or "") < (b.id or "")  -- tie-break: stable on id
   end)
   return out
 end

@@ -1,6 +1,6 @@
 --[[
   LFGScanner.main
-  Sklejka: eventy, slash, periodic update, persistence DB.
+  Glue: events, slash, periodic update, persistence DB.
 ]]
 
 local A = LFGScanner
@@ -8,7 +8,7 @@ local UI = A.UI
 local AG = A.Aggregator
 local P = A.Parser
 
--- Kanaly z ktorych bierzemy wiadomosci. Dopasowanie po lowercase substring.
+-- Channels we read messages from. Lowercase substring match.
 local TRACKED_PATTERNS = {
   "general",
   "global",
@@ -80,7 +80,7 @@ end)
 -- =============================================================
 
 local LIFECYCLE_INTERVAL = 5.0  -- AG.tick: status active/inactive/drop
-local UI_REFRESH_INTERVAL = 1.0 -- UI.Refresh: kolumna Age + status alpha
+local UI_REFRESH_INTERVAL = 1.0 -- UI.Refresh: Age column + status alpha
 local lifecycle_acc, refresh_acc = 0, 0
 
 frame:SetScript("OnUpdate", function(self, elapsed)

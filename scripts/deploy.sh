@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Kopiuje wszystkie addony z ./addons/ do katalogu Interface/AddOns klienta WoW.
-# Uzycie:
-#   ./scripts/deploy.sh                  # kopiuje do domyslnej sciezki
-#   WOW_DIR=/inna/sciezka ./scripts/deploy.sh
-#   ./scripts/deploy.sh LFGScannerLogger    # tylko wybrany addon
+# Copies all addons from ./addons/ into the WoW client's Interface/AddOns folder.
+# Usage:
+#   ./scripts/deploy.sh                  # copy to the default path
+#   WOW_DIR=/other/path ./scripts/deploy.sh
+#   ./scripts/deploy.sh LFGScannerLogger    # only the named addon
 
 set -euo pipefail
 

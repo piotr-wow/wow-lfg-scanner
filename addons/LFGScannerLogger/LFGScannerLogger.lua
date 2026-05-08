@@ -1,14 +1,14 @@
 --[[
   LFGScannerLogger
-  Zapisuje wpisy z wybranych kanalow chatu do SavedVariables (LFGScannerLoggerDB).
-  Cel: zebrac realne dane LFM z /global i /general (Dalaran) do analizy off-line,
-  zanim zbudujemy wlasciwy parser raidow.
+  Captures entries from selected chat channels into SavedVariables (LFGScannerLoggerDB).
+  Goal: gather real LFM data from /global and /general (Dalaran) for offline
+  analysis before building the actual raid parser.
 ]]
 
 local ADDON_NAME = "LFGScannerLogger"
 
--- Wzorce nazw kanalow ktore logujemy. Porownanie po lowercase, dopasowanie czesciowe,
--- wiec "General - Dalaran" dopasuje "general", a customowy "Global" dopasuje "global".
+-- Channel name patterns we log. Compared lowercase, substring match,
+-- so "General - Dalaran" matches "general", and a custom "Global" matches "global".
 local TRACKED_PATTERNS = {
   "general",
   "global",
@@ -18,7 +18,7 @@ local TRACKED_PATTERNS = {
   "lfg",
 }
 
--- Maks. liczba wpisow trzymanych w DB (zeby plik nie urosl bez konca).
+-- Max number of entries kept in DB (so the file doesn't grow without bound).
 local MAX_ENTRIES = 50000
 
 local frame = CreateFrame("Frame")
@@ -50,7 +50,7 @@ local function channelMatches(channelName)
 end
 
 local function nowEpoch()
-  -- time() zwraca uniksowy timestamp (sekundy). date("%H:%M:%S") czytelnie.
+  -- time() returns a unix timestamp (seconds). date("%H:%M:%S") for a human-readable form.
   return time()
 end
 
@@ -75,7 +75,7 @@ local function pruneIfNeeded()
   local n = #entries
   if n <= MAX_ENTRIES then return end
   local toRemove = n - MAX_ENTRIES
-  -- Usun najstarsze (z poczatku tablicy).
+  -- Drop the oldest (front of the array).
   for i = 1, n do
     entries[i] = entries[i + toRemove]
   end
@@ -86,20 +86,20 @@ local function logEntry(msg, author, channelString, channelBaseName, channelInde
   local entry = {
     t = nowEpoch(),                         -- epoch seconds
     s = LFGScannerLoggerDB.current_session_index, -- session index
-    a = author,                             -- "Player-Realm" lub "Player"
-    c = channelBaseName or channelString,   -- np. "General" / "global"
-    cs = channelString,                     -- pelna nazwa np. "General - Dalaran"
-    ci = channelIndex,                      -- numer kanalu w UI
-    z = GetRealZoneText() or "",            -- biezaca strefa gracza
-    m = msg,                                -- tresc
-    g = guid,                               -- GUID nadawcy (jak dostepny)
+    a = author,                             -- "Player-Realm" or "Player"
+    c = channelBaseName or channelString,   -- e.g. "General" / "global"
+    cs = channelString,                     -- full name e.g. "General - Dalaran"
+    ci = channelIndex,                      -- channel index in the UI
+    z = GetRealZoneText() or "",            -- player's current zone
+    m = msg,                                -- body
+    g = guid,                               -- sender GUID (when available)
   }
   table.insert(LFGScannerLoggerDB.entries, entry)
   pruneIfNeeded()
 end
 
 local function onChatMsgChannel(...)
-  -- WotLK 3.3.5a sygnatura:
+  -- WotLK 3.3.5a signature:
   -- msg, author, language, channelString, target, flags, zoneChannelID,
   -- channelIndex, channelBaseName, unused, lineID, guid
   local msg, author, _language, channelString, _target, _flags, zoneChannelID,
@@ -107,7 +107,7 @@ local function onChatMsgChannel(...)
 
   local nameToCheck = channelBaseName
   if not nameToCheck or nameToCheck == "" then
-    -- fallback: spróbuj wyciagnac z channelString przed " - "
+    -- fallback: try to extract from channelString before " - "
     if channelString then
       local base = channelString:match("^([^-]+)")
       if base then nameToCheck = base:gsub("%s+$", "") end

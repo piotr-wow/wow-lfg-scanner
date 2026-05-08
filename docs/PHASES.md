@@ -1,58 +1,73 @@
-# Fazy projektu
+# Project phases
 
-## Faza 1 - Logger (aktualna)
+## Phase 1 - Logger (current)
 
-**Cel:** zebrac realne dane z `/global` i `/general` (Dalaran), zeby na ich
-podstawie zaprojektowac parser. Bez prob parsowania - tylko logowanie 1:1.
+**Goal:** collect real data from `/global` and `/general` (Dalaran) so
+that the parser can be designed against actual postings. No parsing
+attempts here - just 1:1 logging.
 
-**Zakres:**
-- Addon `LFGScannerLogger` rejestruje `CHAT_MSG_CHANNEL`.
-- Filtruje kanaly po nazwie (lowercase, dopasowanie czesciowe): `general`, `global`, `trade`, `world`, `lookingforgroup`, `lfg`.
-- Zapisuje surowe wpisy do `LFGScannerLoggerDB.entries` (timestamp, author, channel, zone, message, GUID).
+**Scope:**
+- Addon `LFGScannerLogger` registers `CHAT_MSG_CHANNEL`.
+- Filters channels by name (lowercase, substring match): `general`,
+  `global`, `trade`, `world`, `lookingforgroup`, `lfg`.
+- Writes raw entries into `LFGScannerLoggerDB.entries` (timestamp,
+  author, channel, zone, message, GUID).
 - Slash: `/lfglog stats`, `/lfglog clear`.
-- Limit 50k wpisow z auto-przycinaniem najstarszych.
+- 50k entry cap with auto-trim of the oldest.
 
-**Done = mamy plik(i) SavedVariables z kilkoma godzinami "primetime" w Dalaranie.**
+**Done = we have SavedVariables file(s) covering a few hours of
+"primetime" in Dalaran.**
 
-Dane mozemy zbierac z wielu kont (ACCOUNT_A, ACCOUNT_B, ...). Addon dziala globalnie
-dla calego klienta WoW; kazde konto pisze osobny `LFGScannerLogger.lua` w swoim
-`WTF/Account/<ACC>/SavedVariables/`. Do mergowania uzywamy `scripts/collect-logs.sh`,
-ktory kopiuje wszystkie znalezione pliki do `data/samples/<ACC>/`.
+We can collect from multiple accounts (ACCOUNT_A, ACCOUNT_B, ...). The
+addon runs globally for the entire WoW client; each account writes its
+own `LFGScannerLogger.lua` into its
+`WTF/Account/<ACC>/SavedVariables/`. To merge them we use
+`scripts/collect-logs.sh`, which copies every found file into
+`data/samples/<ACC>/`.
 
-## Faza 2 - Parser i UI
+## Phase 2 - Parser and UI
 
-**Cel:** zywa tabelka aktywnych raidow.
+**Goal:** live table of active raids.
 
-**Heurystyki sa juz spisane** w [PARSING.md](PARSING.md) i [sample-postings.md](sample-postings.md)
-na podstawie pierwszej probki danych (~2845 wpisow). Kazda nowa porcja moze rozszerzyc slowniki.
+**Heuristics are already written down** in
+[PARSING.md](PARSING.md) and [sample-postings.md](sample-postings.md)
+based on the first sample (~2845 entries). Each new batch can extend
+the dictionaries.
 
-**Bloki do zbudowania:**
+**Building blocks:**
 
-1. **Parser ogloszenia** (czysta funkcja Lua, testowalna):
-   - input: tresc wiadomosci + autor.
-   - output: struktura `ActiveRaid` (patrz PARSING.md sekcja 4).
-   - testy: oczekiwana ekstrakcja dla przykladow z `sample-postings.md`.
+1. **Posting parser** (pure Lua function, testable):
+   - input: message body + author.
+   - output: `ActiveRaid` struct (see PARSING.md section 4).
+   - tests: expected extraction for the examples in
+     `sample-postings.md`.
 
-2. **Aggregator** trzyma `active_raids[author] = { ...parsed, first_seen, last_seen, posts = N }`.
-   - Jezeli ten sam autor wpisuje ponownie -> aktualizuj `last_seen`, ewentualnie merguj informacje (rosnaca lista potrzebnych rol).
-   - `first_seen` mierzony od pierwszego wpisu po zalogowaniu gracza obserwujacego (czyli "ile zbiera od kiedy widzimy").
+2. **Aggregator** keeps `active_raids[author] = { ...parsed, first_seen, last_seen, posts = N }`.
+   - If the same author posts again -> update `last_seen`, optionally
+     merge information (growing list of needed roles).
+   - `first_seen` measured from the first post after our observing
+     player's login (i.e. "how long we've seen them recruiting").
 
 3. **Lifecycle:**
-   - `inactive` (szare) gdy `now - last_seen > 2 min`.
-   - `drop` (usun z tabeli) gdy `now - last_seen > 5 min`.
+   - `inactive` (greyed) when `now - last_seen > 2 min`.
+   - `drop` (remove from table) when `now - last_seen > 5 min`.
 
 4. **UI:**
-   - Pływajaca ramka z tabelka (kolumny: raid, size, role, GS req, autor, czas zbierania, status).
-   - Tooltip nad wierszem -> pelne `raw` ogloszenie + autor + kanal.
-   - Klik LMB -> `/whisper <autor>`. Klik PPM -> menu (ignore, blacklist).
-   - Movable, resizable, pamietane w SavedVariables.
+   - Floating frame with a table (columns: raid, size, role, GS req,
+     author, time recruiting, status).
+   - Tooltip on row hover -> full raw posting + author + channel.
+   - LMB click -> `/whisper <author>`. RMB click -> menu (ignore,
+     blacklist).
+   - Movable, resizable, layout persisted in SavedVariables.
 
-5. **Filtry boostow/handlu:** opcjonalna blacklista slow ("selling", "boost", "wts", "wtb")
-   - decyzja czy wykluczamy, czy oznaczamy ikonka $.
+5. **Boost/trade filters:** optional blacklist of words ("selling",
+   "boost", "wts", "wtb")
+   - decision pending: exclude, or mark with a $ icon.
 
-## Faza 3 - Polish
+## Phase 3 - Polish
 
 - Per-character profile UI.
-- Heurystyki PL ("szukam tanka", "zbieram na ICC", "rezerwy lk").
-- Ewentualne wykrycie tej samej rekrutacji od roznych autorow (np. lider zmienia sie wraz z postem oficera).
-- Eksport/share aktywnej tablicy do schowka.
+- PL heuristics ("szukam tanka", "zbieram na ICC", "rezerwy lk").
+- Possibly detect the same recruitment from different authors (e.g.
+  the leader changes when an officer posts).
+- Export/share the active table to clipboard.
