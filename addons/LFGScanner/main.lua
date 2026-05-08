@@ -40,6 +40,7 @@ end
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("PLAYER_LOGOUT")
 frame:RegisterEvent("CHAT_MSG_CHANNEL")
 
 frame:SetScript("OnEvent", function(self, event, ...)
@@ -52,9 +53,24 @@ frame:SetScript("OnEvent", function(self, event, ...)
   elseif event == "PLAYER_LOGIN" then
     ensureDB()
     A.state.login_time = A.now()
+    local restored = AG.hydrate(A.db.persisted, A.state.login_time)
     UI.Init()
     UI.Refresh()
     A.print(("v%s loaded. /lfg show|hide|reset|stats"):format(A.VERSION))
+    if restored > 0 then
+      A.print(("Restored %d raid(s) from previous session."):format(restored))
+    end
+
+  elseif event == "PLAYER_LOGOUT" then
+    -- Snapshot the live state so /reload and character-switch keep the table.
+    -- The next PLAYER_LOGIN runs an AG.tick() that prunes anything stale.
+    if A.db then
+      A.db.persisted = A.db.persisted or {}
+      A.db.persisted.saved_at = A.now()
+      A.db.persisted.raids = A.state.raids
+      A.db.persisted.by_msg = A.state.by_msg
+      A.db.persisted.by_author_raid = A.state.by_author_raid
+    end
 
   elseif event == "CHAT_MSG_CHANNEL" then
     -- WotLK: msg, author, language, channelString, target, flags, zoneChannelID,

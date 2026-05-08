@@ -35,6 +35,15 @@ A.DB_DEFAULTS = {
     hide_boost = true,
     blacklist_authors = {},
   },
+  -- Snapshot of A.state taken at PLAYER_LOGOUT, restored at PLAYER_LOGIN
+  -- (and immediately pruned by AG.tick, so anything older than INACTIVE_MAX_AGE
+  -- drops on its own).
+  persisted = {
+    saved_at = 0,
+    raids = {},
+    by_msg = {},
+    by_author_raid = {},
+  },
 }
 
 function A.print(msg)

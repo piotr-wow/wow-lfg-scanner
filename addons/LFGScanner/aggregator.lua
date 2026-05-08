@@ -197,3 +197,30 @@ function AG.count()
   for _ in pairs(A.state.raids) do n = n + 1 end
   return n
 end
+
+-- Pull a previously-saved snapshot back into A.state, then run a tick to drop
+-- anything that has aged out while we were away. Returns the number of raids
+-- still alive after pruning.
+function AG.hydrate(saved, now)
+  if type(saved) ~= "table" then return 0 end
+  if type(saved.raids) ~= "table" then return 0 end
+
+  for id, raid in pairs(saved.raids) do
+    if type(raid) == "table" and raid.id then
+      A.state.raids[id] = raid
+    end
+  end
+  if type(saved.by_msg) == "table" then
+    for k, v in pairs(saved.by_msg) do
+      if A.state.raids[v] then A.state.by_msg[k] = v end
+    end
+  end
+  if type(saved.by_author_raid) == "table" then
+    for k, v in pairs(saved.by_author_raid) do
+      if A.state.raids[v] then A.state.by_author_raid[k] = v end
+    end
+  end
+
+  AG.tick(now or A.now())
+  return AG.count()
+end
