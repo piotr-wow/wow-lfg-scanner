@@ -8,7 +8,7 @@ LFGScanner = LFGScanner or {}
 local A = LFGScanner
 
 A.NAME = "LFGScanner"
-A.VERSION = "0.1.0"
+A.VERSION = "0.2.0"
 
 A.LIFECYCLE = {
   ACTIVE_MAX_AGE = 2 * 60,    -- silence > 2 min -> row greys out (inactive)
