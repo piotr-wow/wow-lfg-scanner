@@ -89,7 +89,6 @@ local function fmtProgress(progress, difficulty)
     s = progress.current .. "/" .. progress.max
   end
   if difficulty == "HC" then s = s ~= "" and (s .. " HC") or "HC" end
-  if progress and progress.fresh then s = s ~= "" and (s .. " F") or "FRESH" end
   return s
 end
 

@@ -65,7 +65,7 @@ function AG.create(key, parsed, channel, t)
     raid = parsed.raid,
     size = parsed.size,
     difficulty = parsed.difficulty,
-    progress = { current = parsed.progress_cur, max = parsed.progress_max, fresh = parsed.fresh },
+    progress = { current = parsed.progress_cur, max = parsed.progress_max },
     gs_min = parsed.gs_min,
     gs_strict = parsed.gs_strict,
     role_needs = deepcopy(parsed.role_needs or {}),

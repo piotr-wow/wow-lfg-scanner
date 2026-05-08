@@ -531,7 +531,6 @@ function P.parse(msg, author)
   out.role_needs = P.extractRoles(low)
   out.actual_leader = P.extractActualLeader(raw)
   out.discord_status = P.extractDiscordStatus(low)
-  out.fresh = (low:find("fresh") and true) or false
 
   return out
 end
