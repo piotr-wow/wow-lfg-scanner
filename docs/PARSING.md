@@ -2,7 +2,7 @@
 
 A living document - each new batch of data may extend the
 dictionaries/heuristics. All rules are based on **real postings** from
-`data/samples/PIOTRWOW/` (~2845 entries from 217 unique authors,
+`data/samples/` (~2845 entries from 217 unique authors,
 mix of EN / RU translit / SR / DE / GE).
 
 ## TL;DR pipeline

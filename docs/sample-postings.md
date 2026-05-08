@@ -1,6 +1,6 @@
 # Sample postings - reference for expected classification
 
-Manually labeled examples from `data/samples/PIOTRWOW/LFGScannerLogger.lua`
+Manually labeled examples from `data/samples/<ACCOUNT>/LFGScannerLogger.lua`
 (snapshot 2845 entries, 217 authors, mostly EN/RU/SR/DE).
 
 Used as:

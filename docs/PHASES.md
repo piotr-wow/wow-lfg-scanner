@@ -18,10 +18,9 @@ attempts here - just 1:1 logging.
 **Done = we have SavedVariables file(s) covering a few hours of
 "primetime" in Dalaran.**
 
-We can collect from multiple accounts (PIPOKP, PIOTRWOW, ...). The
-addon runs globally for the entire WoW client; each account writes its
-own `LFGScannerLogger.lua` into its
-`WTF/Account/<ACC>/SavedVariables/`. To merge them we use
+We can collect from multiple accounts. The addon runs globally for the
+entire WoW client; each account writes its own `LFGScannerLogger.lua`
+into its `WTF/Account/<ACC>/SavedVariables/`. To merge them we use
 `scripts/collect-logs.sh`, which copies every found file into
 `data/samples/<ACC>/`.
 
