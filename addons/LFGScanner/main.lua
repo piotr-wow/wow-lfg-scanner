@@ -105,7 +105,6 @@ end)
 -- =============================================================
 
 SLASH_LFGSCANNER1 = "/lfg"
-SLASH_LFGSCANNER2 = "/lfgscanner"
 
 SlashCmdList["LFGSCANNER"] = function(msg)
   msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
