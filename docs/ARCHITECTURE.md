@@ -74,5 +74,5 @@ strictly.
 2. `./scripts/deploy.sh LFGScannerLogger`.
 3. In-game `/reload`.
 4. Test, `/lfglog stats`.
-5. Pull data: copy `WTF/Account/ACCOUNT_A/SavedVariables/LFGScannerLogger.lua`
+5. Pull data: copy `WTF/Account/<ACCOUNT>/SavedVariables/LFGScannerLogger.lua`
    into the repo (e.g. into `data/samples/`, gitignored) and analyze.

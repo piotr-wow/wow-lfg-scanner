@@ -24,19 +24,28 @@ Documentation:
 - [docs/PARSING.md](docs/PARSING.md) - LFM classification and extraction heuristics (derived from real data).
 - [docs/sample-postings.md](docs/sample-postings.md) - representative annotated examples used as parser test fixtures.
 
-## WoW client paths (local)
+## WoW client paths
 
-- Client:                   `/home/piotr/Gry/wow/`
-- AddOns (shared):          `/home/piotr/Gry/wow/Interface/AddOns/`
-- SavedVariables ACCOUNT_A:    `/home/piotr/Gry/wow/WTF/Account/ACCOUNT_A/SavedVariables/`
-- SavedVariables ACCOUNT_B:  `/home/piotr/Gry/wow/WTF/Account/ACCOUNT_B/SavedVariables/`
+The deploy and collect scripts default to `WOW_DIR=$HOME/Games/wow`.
+Override the env var if your client lives elsewhere:
 
-The addon is one directory in `Interface/AddOns/` and works for both
-accounts. Each account writes its own `LFGScannerLogger.lua` into its
+- Client:                   `$WOW_DIR/`
+- AddOns (shared):          `$WOW_DIR/Interface/AddOns/`
+- SavedVariables (per acc): `$WOW_DIR/WTF/Account/<ACCOUNT>/SavedVariables/`
+
+The addon is one directory in `Interface/AddOns/` and works for every
+account. Each account writes its own `LFGScannerLogger.lua` into its
 `SavedVariables/`. To merge them for analysis, use `collect-logs.sh`
 (below).
 
-## Deploy to client
+## Install (end users)
+
+Grab the latest ZIP from the [Releases](../../releases/latest) page and
+unpack it into your client's `Interface/AddOns/` folder. The ZIP
+already contains the addon directory at the top level - drop it next
+to your other AddOns and `/reload` (or relog).
+
+## Deploy from source (development)
 
 ```bash
 # All addons from ./addons/
@@ -86,15 +95,15 @@ For classification and extraction heuristics see [docs/PARSING.md](docs/PARSING.
    - `/lfglog` or `/lfglog stats` - statistics (entry count, last entry).
    - `/lfglog clear` - clear DB (e.g. after analysis).
 5. Close the game **or** run `/reload` - SavedVariables get flushed to
-   disk. Do this for **each account separately** (ACCOUNT_A and ACCOUNT_B),
-   because SavedVariables is written only for the active account.
+   disk. Do this for **each account separately**, because
+   SavedVariables is written only for the active account.
 6. Data files:
-   - `/home/piotr/Gry/wow/WTF/Account/ACCOUNT_A/SavedVariables/LFGScannerLogger.lua`
-   - `/home/piotr/Gry/wow/WTF/Account/ACCOUNT_B/SavedVariables/LFGScannerLogger.lua`
+   `$WOW_DIR/WTF/Account/<ACCOUNT>/SavedVariables/LFGScannerLogger.lua`
+   (one per logged-in account).
 7. Collect into the repo (to `data/samples/<ACCOUNT>/`):
    ```bash
-   ./scripts/collect-logs.sh                  # all accounts
-   ./scripts/collect-logs.sh ACCOUNT_A ACCOUNT_B  # only the listed ones
+   ./scripts/collect-logs.sh                       # all accounts
+   ./scripts/collect-logs.sh ACCOUNT1 ACCOUNT2     # only the listed ones
    ```
 
 ## Stored data format

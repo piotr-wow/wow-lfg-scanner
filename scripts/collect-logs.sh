@@ -2,13 +2,13 @@
 # Collects LFGScannerLogger.lua files from every account in WTF/Account/* into data/samples/<ACCOUNT>/.
 # By default scans all accounts. Specific names can be passed in.
 # Usage:
-#   ./scripts/collect-logs.sh                     # all accounts
-#   ./scripts/collect-logs.sh ACCOUNT_A ACCOUNT_B     # just those
+#   ./scripts/collect-logs.sh                       # all accounts
+#   ./scripts/collect-logs.sh ACCOUNT1 ACCOUNT2     # just those
 #   WOW_DIR=/other/path ./scripts/collect-logs.sh
 
 set -euo pipefail
 
-WOW_DIR="${WOW_DIR:-/home/piotr/Gry/wow}"
+WOW_DIR="${WOW_DIR:-$HOME/Games/wow}"
 ACCOUNTS_DIR="${WOW_DIR}/WTF/Account"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

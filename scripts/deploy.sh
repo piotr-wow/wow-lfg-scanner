@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-WOW_DIR="${WOW_DIR:-/home/piotr/Gry/wow}"
+WOW_DIR="${WOW_DIR:-$HOME/Games/wow}"
 ADDONS_DST="${WOW_DIR}/Interface/AddOns"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
