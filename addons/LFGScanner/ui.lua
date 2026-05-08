@@ -22,7 +22,7 @@ local TAB_GAP = 2
 -- Column layout: { key, header, width }
 UI.COLUMNS = {
   { key = "raid",     header = "Raid",   width = 80 },
-  { key = "progress", header = "Prog",   width = 60 },
+  { key = "progress", header = "Prog",   width = 80 },
   { key = "gs",       header = "GS",     width = 50 },
   { key = "disc",     header = "Disc",   width = 40 },
   { key = "needs",    header = "Needs",  width = 110 },
@@ -83,12 +83,13 @@ local function fmtGS(gs_min, gs_strict)
   return s
 end
 
-local function fmtProgress(progress, difficulty)
+local function fmtProgress(progress, difficulty, at_boss)
   local s = ""
   if progress and progress.current and progress.max then
     s = progress.current .. "/" .. progress.max
   end
   if difficulty == "HC" then s = s ~= "" and (s .. " HC") or "HC" end
+  if at_boss then s = s ~= "" and (s .. " @" .. at_boss) or ("@ " .. at_boss) end
   return s
 end
 
@@ -128,7 +129,7 @@ end
 
 local function rowText(raid, key, now)
   if key == "raid"     then return raid.raid or "?" end
-  if key == "progress" then return fmtProgress(raid.progress, raid.difficulty) end
+  if key == "progress" then return fmtProgress(raid.progress, raid.difficulty, raid.at_boss) end
   if key == "gs"       then return fmtGS(raid.gs_min, raid.gs_strict) end
   if key == "disc"     then return fmtDisc(raid) end
   if key == "needs"    then return fmtRoles(raid.role_needs) end
@@ -260,9 +261,6 @@ local function makeRow(parent, index)
     for c in pairs(self.raid.channels or {}) do table.insert(channels, c) end
     GameTooltip:AddDoubleLine("Channels", table.concat(channels, ", "), 0.7, 0.7, 0.7, 1, 1, 1)
     GameTooltip:AddDoubleLine("Posts", tostring(self.raid.posts_count or 1), 0.7, 0.7, 0.7, 1, 1, 1)
-    if self.raid.actual_leader then
-      GameTooltip:AddDoubleLine("Leader (@)", self.raid.actual_leader, 0.7, 0.7, 0.7, 1, 1, 0.4)
-    end
     GameTooltip:AddDoubleLine("Status", self.raid.status or "?", 0.7, 0.7, 0.7,
       self.raid.status == "active" and 0.4 or 0.8,
       self.raid.status == "active" and 1 or 0.8,

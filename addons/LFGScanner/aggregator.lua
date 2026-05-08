@@ -77,7 +77,8 @@ function AG.create(key, parsed, channel, t)
     max_in_group = parsed.max,
     posters = {},
     primary_poster = parsed.author,
-    actual_leader = parsed.actual_leader,
+    at_boss = parsed.at_boss,
+    at_boss_num = parsed.at_boss_num,
     channels = {},
     first_seen = t,
     last_seen = t,
@@ -129,8 +130,9 @@ function AG.update(raid, parsed, channel, t)
   elseif raid.discord_status == nil then
     raid.discord_status = parsed.discord_status or "unknown"
   end
-  if parsed.actual_leader and not raid.actual_leader then
-    raid.actual_leader = parsed.actual_leader
+  if parsed.at_boss then
+    raid.at_boss = parsed.at_boss
+    raid.at_boss_num = parsed.at_boss_num
   end
   if parsed.raw_message then raid.raw_message = parsed.raw_message end
   raid.status = "active"

@@ -456,10 +456,76 @@ function P.extractRoles(low)
   return result
 end
 
-function P.extractActualLeader(raw)
-  local nick = raw:match("@(%w+)")
-  if nick and nick:len() >= 2 then return nick end
-  return nil
+-- Boss aliases used in '@<boss>' tokens. Map alias -> { short_name, boss_num }.
+-- '@<boss>' in an LFM means "raid is currently AT this boss" (looking for a
+-- replacement to continue), NOT a leader's nickname. The token also collides
+-- with class/spec mentions (@unholy, @sp, @cat, @rshamy, @disc) and status
+-- markers (@fresh) - those are intentionally absent from this map and are
+-- ignored.
+P.BOSS_ALIASES = {
+  -- ICC (12 bosses, in order)
+  ["mar"]         = { "MAR",    1 },
+  ["lm"]          = { "MAR",    1 },
+  ["marrowgar"]   = { "MAR",    1 },
+  ["ldw"]         = { "LDW",    2 },
+  ["lady"]        = { "LDW",    2 },
+  ["deathwhisper"]= { "LDW",    2 },
+  ["gs"]          = { "GS",     3 },
+  ["gsh"]         = { "GS",     3 },
+  ["gunship"]     = { "GS",     3 },
+  ["dbs"]         = { "DBS",    4 },
+  ["saur"]        = { "DBS",    4 },
+  ["saurfang"]    = { "DBS",    4 },
+  ["fc"]          = { "FC",     5 },
+  ["fest"]        = { "FC",     5 },
+  ["fester"]      = { "FC",     5 },
+  ["festergut"]   = { "FC",     5 },
+  ["rot"]         = { "ROT",    6 },
+  ["rotface"]     = { "ROT",    6 },
+  ["pp"]          = { "PP",     7 },
+  ["prof"]        = { "PP",     7 },
+  ["putricide"]   = { "PP",     7 },
+  ["plage"]       = { "PP",     7 },     -- Plagueworks wing -> last boss in wing
+  ["bp"]          = { "BPC",    8 },
+  ["bpc"]         = { "BPC",    8 },
+  ["bprinces"]    = { "BPC",    8 },
+  ["princes"]     = { "BPC",    8 },
+  ["blood"]       = { "BPC",    8 },     -- ambiguous, but 'Blood Council' is more common usage
+  ["bq"]          = { "BQL",    9 },
+  ["bql"]         = { "BQL",    9 },
+  ["queen"]       = { "BQL",    9 },
+  ["bqueen"]      = { "BQL",    9 },
+  ["bqhc"]        = { "BQL",    9 },
+  ["lanathel"]    = { "BQL",    9 },
+  ["vdw"]         = { "VDW",   10 },
+  ["val"]         = { "VDW",   10 },
+  ["vali"]        = { "VDW",   10 },
+  ["dbw"]         = { "VDW",   10 },
+  ["valithria"]   = { "VDW",   10 },
+  ["dreamwalker"] = { "VDW",   10 },
+  ["sin"]         = { "SIN",   11 },
+  ["sind"]        = { "SIN",   11 },
+  ["sindy"]       = { "SIN",   11 },
+  ["syndra"]      = { "SIN",   11 },
+  ["sindra"]      = { "SIN",   11 },
+  ["sindragosa"]  = { "SIN",   11 },
+  ["lk"]          = { "LK",    12 },
+  ["lich"]        = { "LK",    12 },
+  ["lichking"]    = { "LK",    12 },
+  -- RS (1 boss)
+  ["halion"]      = { "HALION", 1 },
+  ["hallion"]     = { "HALION", 1 },
+}
+
+function P.extractAtBoss(raw)
+  -- First @<token> that resolves against BOSS_ALIASES wins. Class/spec @-tokens
+  -- (@unholy, @sp, @disc, ...) and @fresh are not in the map -> skipped.
+  for tok in raw:gmatch("@(%w+)") do
+    local key = tok:lower()
+    local entry = P.BOSS_ALIASES[key]
+    if entry then return entry[1], entry[2] end
+  end
+  return nil, nil
 end
 
 function P.extractDiscordStatus(low)
@@ -529,7 +595,7 @@ function P.parse(msg, author)
   out.reserves_raw, out.reserves_tokens = P.extractReserves(raw)
   out.ach_req = P.extractAchReq(raw, low)
   out.role_needs = P.extractRoles(low)
-  out.actual_leader = P.extractActualLeader(raw)
+  out.at_boss, out.at_boss_num = P.extractAtBoss(raw)
   out.discord_status = P.extractDiscordStatus(low)
 
   return out
