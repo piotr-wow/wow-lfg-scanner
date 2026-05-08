@@ -1,98 +1,105 @@
 # LFG Scanner
 
-Addon do WoW WotLK 3.3.5a, ktory na podstawie wpisow w kanalach `/global` oraz
-`/general` (Dalaran) wykrywa aktywne ogloszenia LFM raidow i prezentuje je w
-tabelce: jaki raid, ile potrzeba, jakie role, jakie rezerwy, jak dlugo gracz
-juz zbiera.
+WoW WotLK 3.3.5a addon that watches `/global` and `/general` (Dalaran)
+chat for active raid LFM postings and presents them in a table: which
+raid, what's needed, which roles, which reserves, how long the leader
+has been recruiting.
 
-Repo zawiera wiele addonow w `addons/` dzielacych jeden skrypt deploya.
+The repo holds multiple addons under `addons/` sharing one deploy script.
 
 ## Status
 
-**Faza 1 (done):** `LFGScannerLogger` - addon do logowania surowych wpisow z czatu.
-Sluzy do zbierania probek pod heurystyki parsera. Mozna trzymac wlaczony
-rownolegle z fazą 2 zeby gromadzic dalsze dane.
+**Phase 1 (done):** `LFGScannerLogger` - addon that captures raw chat
+entries. Used to gather samples for parser heuristics. Can be left
+enabled alongside phase 2 to keep collecting more data.
 
-**Faza 2 (kod gotowy, in-game test pending):** `LFGScanner` - wlasciwy addon z
-tabelka aktywnych raidow, tooltipem pelnego ogloszenia, deduplikacja
-multi-channel/multi-officer, lifecycle inactive=2min/drop=5min, klik = whisper.
+**Phase 2 (code ready, in-game test pending):** `LFGScanner` - the
+actual addon: live raid table, full-message tooltip, multi-channel /
+multi-officer dedup, lifecycle inactive=2min/drop=5min, click = whisper.
 Slash: `/lfg show|hide|toggle|reset|stats|resetpos`.
 
-Dokumentacja:
-- [docs/PHASES.md](docs/PHASES.md) - fazy projektu.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - layout i decyzje techniczne.
-- [docs/PARSING.md](docs/PARSING.md) - heurystyki klasyfikacji i ekstrakcji LFM (na bazie realnych danych).
-- [docs/sample-postings.md](docs/sample-postings.md) - reprezentatywne przyklady z anotacja, sluza jako referencja testow parsera.
+Documentation:
+- [docs/PHASES.md](docs/PHASES.md) - project phases.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - layout and technical decisions.
+- [docs/PARSING.md](docs/PARSING.md) - LFM classification and extraction heuristics (derived from real data).
+- [docs/sample-postings.md](docs/sample-postings.md) - representative annotated examples used as parser test fixtures.
 
-## Sciezki klienta WoW (lokalnie)
+## WoW client paths (local)
 
-- Klient:                  `/home/piotr/Gry/wow/`
-- AddOns (wspolne):        `/home/piotr/Gry/wow/Interface/AddOns/`
-- SavedVariables PIPOKP:   `/home/piotr/Gry/wow/WTF/Account/PIPOKP/SavedVariables/`
-- SavedVariables PIOTRWOW: `/home/piotr/Gry/wow/WTF/Account/PIOTRWOW/SavedVariables/`
+- Client:                   `/home/piotr/Gry/wow/`
+- AddOns (shared):          `/home/piotr/Gry/wow/Interface/AddOns/`
+- SavedVariables PIPOKP:    `/home/piotr/Gry/wow/WTF/Account/PIPOKP/SavedVariables/`
+- SavedVariables PIOTRWOW:  `/home/piotr/Gry/wow/WTF/Account/PIOTRWOW/SavedVariables/`
 
-Addon jest jednym katalogiem w `Interface/AddOns/` i dziala dla obu kont. Kazde
-konto pisze wlasny plik `LFGScannerLogger.lua` w swoim `SavedVariables/`. Do
-analizy zbieramy je razem skryptem `collect-logs.sh` (ponizej).
+The addon is one directory in `Interface/AddOns/` and works for both
+accounts. Each account writes its own `LFGScannerLogger.lua` into its
+`SavedVariables/`. To merge them for analysis, use `collect-logs.sh`
+(below).
 
-## Deploy do klienta
+## Deploy to client
 
 ```bash
-# Wszystkie addony z ./addons/
+# All addons from ./addons/
 ./scripts/deploy.sh
 
-# Tylko jeden
+# Just one
 ./scripts/deploy.sh LFGScannerLogger
 
-# Inna sciezka klienta
-WOW_DIR=/inna/sciezka ./scripts/deploy.sh
+# Different client path
+WOW_DIR=/other/path ./scripts/deploy.sh
 ```
 
-Skrypt po prostu kopiuje katalog addonu do `Interface/AddOns/` (najpierw kasuje
-poprzednia wersje). Po deployu w grze wymagany jest `/reload` lub ponowne
-zalogowanie.
+The script just copies the addon directory into `Interface/AddOns/`
+(deletes the previous version first). After deploy, run `/reload`
+in-game or relog.
 
-## Faza 2 - jak uzywac LFGScanner
+## Phase 2 - using LFGScanner
 
 1. `./scripts/deploy.sh LFGScanner`
-2. Wejdz do gry, wlacz w AddOns na ekranie wyboru postaci.
-3. Po zalogowaniu pojawi sie ramka `LFG Scanner`. Mozna ja przesunac (drag
-   za pasek tytulu) i zmienic rozmiar (uchwyt prawy-dolny rog).
-4. Ramka aktualizuje sie automatycznie - kazdy `LFM` z czatu w `general`,
-   `global`, `trade`, `world`, `lookingforgroup` jest klasyfikowany,
-   deduplikowany i wyswietlany.
-5. Po najechaniu na wiersz - tooltip z pelnym ogloszeniem + lista posterow,
-   kanalow, liczba postow.
-6. Kliknij wiersz LMB - otworzy sie chat z `/w <poster>`.
+2. Enter the game, enable it in the AddOns list on the character
+   selection screen.
+3. After login, an `LFG Scanner` frame appears. It can be moved (drag
+   the title bar) and resized (handle in the bottom-right corner).
+4. The frame updates automatically - every `LFM` posted in `general`,
+   `global`, `trade`, `world`, or `lookingforgroup` is classified,
+   deduplicated, and shown.
+5. Hover a row for a tooltip with the full posting + posters list,
+   channels, post count.
+6. Left-click a row - opens a `/w <poster>` chat.
 7. Slash:
-   - `/lfg` lub `/lfg toggle` - pokaz/ukryj
-   - `/lfg reset` - wyczysc liste raidow
-   - `/lfg stats` - liczba aktywnych raidow
-   - `/lfg resetpos` - przywroc domyslna pozycje/rozmiar ramki
+   - `/lfg` or `/lfg toggle` - show/hide
+   - `/lfg reset` - clear the raid list
+   - `/lfg stats` - active raid count
+   - `/lfg resetpos` - restore default frame position/size
 
-Heurystyki klasyfikacji i ekstrakcji - patrz [docs/PARSING.md](docs/PARSING.md).
+For classification and extraction heuristics see [docs/PARSING.md](docs/PARSING.md).
 
-## Faza 1 - jak uzywac LFGScannerLogger
+## Phase 1 - using LFGScannerLogger
 
 1. `./scripts/deploy.sh LFGScannerLogger`
-2. Wejdz do gry, upewnij sie ze addon jest wlaczony (lista AddOns na ekranie wyboru postaci, zaznaczone "Load out of date AddOns" jezeli trzeba).
-3. Spedz troche czasu w Dalaranie z aktywnymi kanalami `/general`, `/global` (i opcjonalnie `/trade`, `/world`).
-4. W grze:
-   - `/lfglog` lub `/lfglog stats` - statystyki (ilosc wpisow, ostatni wpis).
-   - `/lfglog clear` - wyczysc DB (np. po analizie).
-5. Zamknij gre **albo** wykonaj `/reload` - wtedy SavedVariables zostana zapisane na dysk. Rob to dla **kazdego konta osobno** (PIPOKP i PIOTRWOW), bo plik SavedVariables jest pisany tylko dla aktywnego konta.
-6. Pliki z danymi:
+2. Enter the game, make sure the addon is enabled (AddOns list on the
+   character select screen, with "Load out of date AddOns" checked if
+   needed).
+3. Spend some time in Dalaran with `/general` and `/global` (and
+   optionally `/trade`, `/world`) channels active.
+4. In-game:
+   - `/lfglog` or `/lfglog stats` - statistics (entry count, last entry).
+   - `/lfglog clear` - clear DB (e.g. after analysis).
+5. Close the game **or** run `/reload` - SavedVariables get flushed to
+   disk. Do this for **each account separately** (PIPOKP and PIOTRWOW),
+   because SavedVariables is written only for the active account.
+6. Data files:
    - `/home/piotr/Gry/wow/WTF/Account/PIPOKP/SavedVariables/LFGScannerLogger.lua`
    - `/home/piotr/Gry/wow/WTF/Account/PIOTRWOW/SavedVariables/LFGScannerLogger.lua`
-7. Zbieranie do repo (do `data/samples/<ACCOUNT>/`):
+7. Collect into the repo (to `data/samples/<ACCOUNT>/`):
    ```bash
-   ./scripts/collect-logs.sh                  # wszystkie konta
-   ./scripts/collect-logs.sh PIPOKP PIOTRWOW  # tylko wybrane
+   ./scripts/collect-logs.sh                  # all accounts
+   ./scripts/collect-logs.sh PIPOKP PIOTRWOW  # only the listed ones
    ```
 
-## Format zapisanych danych
+## Stored data format
 
-`LFGScannerLoggerDB` (Lua-table) zawiera:
+`LFGScannerLoggerDB` (Lua-table) holds:
 
 ```lua
 LFGScannerLoggerDB = {
@@ -103,7 +110,7 @@ LFGScannerLoggerDB = {
   },
   current_session_index = N,
   entries = {
-    -- skrocone klucze zeby plik nie pucznial
+    -- short keys to keep file size down
     { t = <epoch>, s = <session_idx>, a = "Author", c = "General", cs = "General - Dalaran",
       ci = 1, z = "Dalaran", m = "LFM ICC25 need 2 heal 1 dps...", g = "0x..." },
     ...
@@ -111,4 +118,4 @@ LFGScannerLoggerDB = {
 }
 ```
 
-Limit: ostatnie 50 000 wpisow (starsze sa przycinane przy zapisie).
+Limit: last 50,000 entries (older ones are trimmed on save).

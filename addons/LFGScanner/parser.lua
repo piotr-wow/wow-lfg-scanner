@@ -1,8 +1,8 @@
 --[[
   LFGScanner.Parser
-  Czysta logika klasyfikacji + ekstrakcji pol z wiadomosci czatu.
-  Heurystyki spisane w docs/PARSING.md.
-  Idealnie testowalna bez WoW API (uzywa tylko string/table/math).
+  Pure classification + field-extraction logic for chat messages.
+  Heuristics documented in docs/PARSING.md.
+  Designed to be testable without WoW APIs (uses only string/table/math).
 ]]
 
 LFGScanner = LFGScanner or {}
@@ -11,13 +11,13 @@ A.Parser = A.Parser or {}
 local P = A.Parser
 
 -- =============================================================
--- Slowniki
+-- Dictionaries
 -- =============================================================
 
--- Wzorce raidow. Kolejnosc istotna: dluzsze/specyficzniejsze pierwsze.
+-- Raid patterns. Order matters: longer / more specific first.
 -- { lua_pattern, normalized_name, size, default_difficulty }
 P.RAID_PATTERNS = {
-  -- ICC (najpopularniejsze)
+  -- ICC (most common)
   { "icc%s*25%s*hc",     "ICC25HC", 25, "HC" },
   { "icc%-25%-hc",       "ICC25HC", 25, "HC" },
   { "icc25hc",           "ICC25HC", 25, "HC" },
@@ -29,7 +29,7 @@ P.RAID_PATTERNS = {
   { "icc%s*10",          "ICC10",   10, "NM" },
   { "icc10",             "ICC10",   10, "NM" },
   { "icc%s*flex",        "ICC10",   10, "NM" },
-  -- TOGC (przed TOC zeby nie dopasowalo "toc")
+  -- TOGC (before TOC so it doesn't match "toc")
   { "togc%s*25",         "TOGC25",  25, "HC" },
   { "togc%s*10",         "TOGC10",  10, "HC" },
   { "togc25",            "TOGC25",  25, "HC" },
@@ -58,7 +58,7 @@ P.RAID_PATTERNS = {
   { "voa25",             "VOA25",   25, "NM" },
   { "voa10",             "VOA10",   10, "NM" },
   { "voa",               "VOA25",   25, "NM" },
-  -- Inne
+  -- Others
   { "ulduar%s*25",       "ULDUAR",  25, "NM" },
   { "ulduar",            "ULDUAR",  25, "NM" },
   { "naxx",              "NAXX",    25, "NM" },
@@ -68,7 +68,7 @@ P.RAID_PATTERNS = {
   { "bane",              "BANE",    25, "HC" },
 }
 
--- Tokeny rol (plain strings, dopasowanie exact match per slowo).
+-- Role tokens (plain strings, exact match per word).
 P.ROLE_TOKENS = {
   TANK   = { "tank", "tanks", "mt", "ot", "prot", "bdk", "bear", "ppal", "pwar" },
   HEAL   = { "heal", "heals", "healer", "healers", "hpala", "disco", "discp", "holy", "hpriest", "rsham", "hdruid", "hpal" },
@@ -77,7 +77,7 @@ P.ROLE_TOKENS = {
   DPS    = { "dps", "dd" },
 }
 
--- Sygnaly antywskazujace LFM_RAID. Jezeli wystapi, klasyfikator nie wybierze LFM.
+-- Negative signals against LFM_RAID. If any matches, classifier won't pick LFM.
 P.NEGATIVE_PATTERNS = {
   "wts%s", "^wts", " wtb ", "^wtb",
   "selling%s", "^selling",
@@ -91,7 +91,7 @@ P.NEGATIVE_PATTERNS = {
   "looking%s+for%s+active",
 }
 
--- Sygnaly pozytywne dla LFM_RAID.
+-- Positive signals for LFM_RAID.
 P.POSITIVE_PATTERNS = {
   "^lfm[%s%-#]", "^#lfm", "%slfm[%s%-]", "^lfm$",
   "^lf%s",                          -- "LF tank", "LF healer"
@@ -103,7 +103,7 @@ P.POSITIVE_PATTERNS = {
 }
 
 -- =============================================================
--- Helpery
+-- Helpers
 -- =============================================================
 
 function P.stripWoWLinks(s)
@@ -126,10 +126,10 @@ function P.normalize(s)
 end
 
 -- =============================================================
--- Filtr jezykowy (akceptujemy tylko angielski)
+-- Language filter (we accept English only)
 -- =============================================================
 
--- Tagi jezykowe wskazujace nie-angielski.
+-- Language tags that mark non-English content.
 P.NON_EN_LANG_TAGS = {
   "%[ru%]", "%[rus%]", "%[de%]", "%[ger%]", "%[fr%]", "%[fra%]",
   "%[es%]", "%[esp%]", "%[br%]", "%[pt%]", "%[pl%]",
@@ -137,7 +137,7 @@ P.NON_EN_LANG_TAGS = {
   "%[bg%]", "%[ge%]", "%[gr%]", "%[it%]", "%[tr%]", "%[cn%]",
 }
 
--- Slowa charakterystyczne dla nie-angielskiego.
+-- Words characteristic of non-English content.
 P.NON_EN_KEYWORDS = {
   -- DE
   "wir%s+sind", "wöchent", "deutsch", "raiden", "mitspielern",
@@ -148,7 +148,7 @@ P.NON_EN_KEYWORDS = {
   "balkan", "srpsk", "bosansk", "hrvatsk", "discord%s*je",
   -- PL
   "rekrutuje", "rekrutacja", "szukamy",
-  -- RU/CYR translit (charakterystyczne fragmenty)
+  -- RU/CYR translit (characteristic fragments)
   "pyc[ck][ko]", "rycc?ko", "rycc?ka", "npurJI", "npuhuM",
   "ko[Mm]aH", "ack[Oo]B", "rocyga", "umpok",
 }
@@ -166,13 +166,13 @@ function P.hasNonAsciiBytes(s, threshold)
 end
 
 function P.looksLikeTranslitWord(word)
-  -- Cyrylica zatluszczona ASCII charakteryzuje sie:
-  -- - cyfra w srodku slowa miedzy literami: "u9eT", "g9eT", "p9gbI"
-  -- - male potem duze w >=5-znakowym slowie: "ruJI", "npurJI", "onblmHblx"
+  -- Cyrillic-as-ASCII looks like:
+  -- - a digit between letters in a word: "u9eT", "g9eT", "p9gbI"
+  -- - lowercase then uppercase in a >=5 char word: "ruJI", "npurJI", "onblmHblx"
   --
-  -- Nie uzywamy juz reguly "[A-Z][A-Z][A-Z] z dziwnymi znakami" - falszywie
-  -- flagowala typowe LFM-owe tokeny: ICC25HC, RS25HC, (B+P+SFS, RES),
-  -- GS+SPEC, B+O+P. Skutkiem byly LFM klasyfikowane jako NON_ENGLISH.
+  -- We no longer use the "[A-Z][A-Z][A-Z] mixed with non-letters" rule - it
+  -- false-flagged typical LFM tokens: ICC25HC, RS25HC, (B+P+SFS, RES),
+  -- GS+SPEC, B+O+P. The result was real LFMs being classified as NON_ENGLISH.
   if word:len() < 4 then return false end
   if word:match("[A-Za-z]%d[A-Za-z]") then return true end
   if word:len() >= 5 and word:match("[a-z][A-Z]") then return true end
@@ -183,20 +183,20 @@ function P.isEnglishOnly(raw)
   if not raw or raw == "" then return true end
   local low = raw:lower()
 
-  -- 1. Tagi jezykowe na poczatku/w naglowku
+  -- 1. Language tags at start / in header
   for _, tag in ipairs(P.NON_EN_LANG_TAGS) do
     if low:find(tag) then return false end
   end
 
-  -- 2. Bajty UTF-8 spoza ASCII (cyrylica, polskie/niemieckie/balkanowskie diakrytyki)
+  -- 2. UTF-8 bytes outside ASCII (Cyrillic, Polish/German/Balkan diacritics)
   if P.hasNonAsciiBytes(raw, 5) then return false end
 
-  -- 3. Slowa-markery jezykow obcych
+  -- 3. Marker words for non-English languages
   for _, kw in ipairs(P.NON_EN_KEYWORDS) do
     if low:find(kw) then return false end
   end
 
-  -- 4. Heurystyka cyrylicy zatluszczonej ASCII (translit)
+  -- 4. Cyrillic-as-ASCII heuristic (translit)
   local translit_count = 0
   for word in raw:gmatch("%S+") do
     if P.looksLikeTranslitWord(word) then
@@ -209,7 +209,7 @@ function P.isEnglishOnly(raw)
 end
 
 -- =============================================================
--- Klasyfikacja
+-- Classification
 -- =============================================================
 
 function P.isItemSell(low, raw)
@@ -237,8 +237,8 @@ function P.isBoostSell(low)
 end
 
 function P.isGuildRecruit(low, raw)
-  -- Prefix < ... > / > ... < / << ... >> na poczatku - prawie zawsze gildia/boost,
-  -- chyba ze sa silne sygnaly LFM_RAID (LFM + (N/M) + Need + raid).
+  -- Prefix < ... > / > ... < / << ... >> at the start - almost always a guild/boost,
+  -- unless we have strong LFM_RAID signals (LFM + (N/M) + Need + raid).
   local prefix_bracket = raw:match("^%s*[<>]") and true or false
   if prefix_bracket then
     local strong_lfm = (
@@ -263,7 +263,8 @@ end
 function P.isAchievementRun(low, raw)
   local has_ach_link = raw:find("|Hachievement:") and true or false
   if has_ach_link then
-    -- LFM z (N/M) i nazwa raidu wygrywa - to nadal LFM_RAID, achievement to wymog
+    -- An LFM with (N/M) and a raid name wins - that's still LFM_RAID, the
+    -- achievement is a requirement.
     if low:find("%(%d+/%d+%)") then return false end
     if low:find("^lfm") or low:find("%slfm%s") then return false end
     return true
@@ -283,7 +284,7 @@ end
 function P.classify(raw)
   local low = (raw or ""):lower()
 
-  -- Filtr jezyka: tylko angielski wpada do dalszej klasyfikacji.
+  -- Language filter: only English passes into further classification.
   if not P.isEnglishOnly(raw) then return "NON_ENGLISH" end
 
   if P.isItemSell(low, raw)      then return "ITEM_SELL"       end
@@ -299,7 +300,7 @@ function P.classify(raw)
   for _, pat in ipairs(P.POSITIVE_PATTERNS) do
     if low:find(pat) then positive = positive + 1; break end
   end
-  -- Drugi pass - zliczamy DODATKOWE pozytywy poza glownym LFM-trigger.
+  -- Second pass - count EXTRA positives beyond the main LFM trigger.
   if low:find("/w%s+me") or low:find("pst%s+me") then positive = positive + 1 end
   if low:find("%(%d+/%d+%)") then positive = positive + 1 end
   if low:find("need%s+%d") or low:find("need%s+all") or low:find("%sneed%s") then positive = positive + 1 end
@@ -314,7 +315,7 @@ function P.classify(raw)
 end
 
 -- =============================================================
--- Ekstrakcja pol
+-- Field extraction
 -- =============================================================
 
 function P.extractGS(low)
@@ -340,7 +341,7 @@ function P.extractGS(low)
   local k = low:match("(%d%d%d%d)%s*%+?%s*gs")
   if k then return tonumber(k), false end
 
-  -- "all +6,2+achiv" - wzorzec ze danych
+  -- "all +6,2+achiv" - pattern from the data
   a, b = low:match("all%s*%+?(%d)[%.,](%d)")
   if a then return tonumber(a) * 1000 + tonumber(b) * 100, false end
 
@@ -348,7 +349,7 @@ function P.extractGS(low)
 end
 
 function P.extractCurrentMax(low)
-  -- Najlepiej (N/M) na koncu
+  -- Best is (N/M) at the end
   local n, m
   for nn, mm in low:gmatch("%((%d+)/(%d+)%)") do
     nn, mm = tonumber(nn), tonumber(mm)
@@ -356,7 +357,7 @@ function P.extractCurrentMax(low)
   end
   if n then return n, m end
 
-  -- Bez nawiasow na koncu
+  -- Without parens at the end
   local nn, mm = low:match("(%d+)/(%d+)%s*$")
   if nn then
     nn, mm = tonumber(nn), tonumber(mm)
@@ -366,7 +367,7 @@ function P.extractCurrentMax(low)
 end
 
 function P.extractProgress(low)
-  -- Progres bossow: M in {12, 5, 4, 6} (raidy WotLK)
+  -- Boss progress: M in {12, 5, 4, 6} (WotLK raids)
   for n, m in low:gmatch("(%d+)/(%d+)") do
     n, m = tonumber(n), tonumber(m)
     if m == 12 or m == 5 or m == 4 or m == 6 then
@@ -390,7 +391,7 @@ function P.tokenizeReserves(block)
 end
 
 function P.extractReserves(raw)
-  -- Kazdy blok w nawiasach zawierajacy "res"
+  -- Each parenthesized block containing "res"
   for block in raw:gmatch("%((.-)%)") do
     if block:lower():find("res") then
       return "(" .. block .. ")", P.tokenizeReserves(block)
@@ -425,7 +426,7 @@ function P.extractRoles(low)
     result.all = true
   end
 
-  -- Pozycja slowa "need" - akceptuj kazdy nastepny znak (przecinek, dwukropek, spacja).
+  -- Position of the word "need" - accept any following character (comma, colon, space).
   local need_pos = low:find("need")
   if not need_pos then
     need_pos = low:find("lfm") or low:find("^lf%s")
@@ -454,14 +455,14 @@ function P.extractActualLeader(raw)
 end
 
 function P.extractDiscordStatus(low)
-  -- 1. Eksplicytnie NIE wymagane (silent runs).
+  -- 1. Explicitly NOT required (silent runs).
   if low:find("no%s+discord") or low:find("no%s+voice") or low:find("no%s+mic")
      or low:find("silent%s+run") or low:find("silent%s+raid")
      or low:find("without%s+discord") or low:find("don't%s+need%s+discord") then
     return "not_required"
   end
 
-  -- 2. Eksplicytnie WYMAGANE.
+  -- 2. Explicitly REQUIRED.
   if low:find("discord%s+mandatory") or low:find("mandatory%s+discord")
      or low:find("discord%s+req") or low:find("discord%s+required")
      or low:find("discord%s+must") or low:find("discord%s+a%s+must")
@@ -471,8 +472,8 @@ function P.extractDiscordStatus(low)
     return "required"
   end
 
-  -- 3. Link do serwera Discord ALBO sama wzmianka "discord" / "disc" - zwykle
-  -- oznacza ze trzeba dolaczyc do serwera. Tu klasyfikujemy jako wymagane.
+  -- 3. Discord server link OR a bare "discord"/"disc" mention - usually means
+  -- you have to join the server. Classified as required here.
   if low:find("discord%.gg/") or low:find("discord%.com/")
      or low:find("%sdiscord%s") or low:find("%sdiscord$") or low:find("^discord%s")
      or low:find("%sdisc%s") or low:find("using%s+discord") or low:find("on%s+discord") then
@@ -483,7 +484,7 @@ function P.extractDiscordStatus(low)
 end
 
 -- =============================================================
--- Glowny entry
+-- Main entry
 -- =============================================================
 
 function P.parse(msg, author)
@@ -507,7 +508,7 @@ function P.parse(msg, author)
   out.size = size
   out.difficulty = diff
 
-  -- Override difficulty jezeli explicit
+  -- Override difficulty when explicit
   if low:find("%shc[%s%)%(/]") or low:find("%shc$") or low:find("heroic") then
     out.difficulty = "HC"
   elseif low:find("%snm[%s%)%(/]") or low:find("%snm$") or low:find("normal") then

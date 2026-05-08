@@ -1,144 +1,175 @@
-# Parsing - na jakiej podstawie wyciagamy dane
+# Parsing - how we extract data from postings
 
-Dokument zywa - kazda nowa porcja danych moze rozszerzyc slowniki/heurystyki.
-Wszystkie reguly opieraja sie na **realnych wpisach** z `data/samples/PIOTRWOW/` (~2845 wpisow z 217 unikalnych autorow, mix EN / RU translit / SR / DE / GE).
+A living document - each new batch of data may extend the
+dictionaries/heuristics. All rules are based on **real postings** from
+`data/samples/PIOTRWOW/` (~2845 entries from 217 unique authors,
+mix of EN / RU translit / SR / DE / GE).
 
 ## TL;DR pipeline
 
 ```
 chat msg
-  -> 0. lang gate       (NON_ENGLISH -> drop, tylko EN dalej)
+  -> 0. lang gate       (NON_ENGLISH -> drop, only EN passes)
   -> 1. classify        (LFM_RAID | GUILD_RECRUIT | BOOST_SELL | ITEM_SELL | ACHIEVEMENT_RUN | DRAMA | OTHER)
   -> 2. extract fields  (raid, size, diff, progress, gs, role_needs, reserves, ach_req, current/max)
   -> 3. dedup           (multi-channel + repost spam + multi-officer co-leadership)
-  -> 4. aggregate       (raid bucketed po normalized-msg, first_seen / last_seen)
+  -> 4. aggregate       (raid bucketed by normalized-msg, first_seen / last_seen)
   -> 5. lifecycle       (active < 2min, inactive 2-5min, drop > 5min)
 ```
 
-## 0. Filtr jezyka (krok 0)
+## 0. Language filter (step 0)
 
-Wpisy nie-angielskie sa odrzucane PRZED klasyfikacja. Sygnaly:
+Non-English entries are dropped BEFORE classification. Signals:
 
-1. **Tagi jezykowe na poczatku/w naglowku**: `[RU]`, `[DE]`, `[BR]`, `[ES]`, `[BALKAN]`, `[SR]`, `[BG]`, `[GE]`, `[FR]`, `[IT]`, `[TR]`, `[PL]`, `[CN]`, `[PT]`, `[GR]`, `[HR]`, `[BS]`.
-2. **Bajty UTF-8 spoza ASCII** - >=5 bajtow `> 127` (cyrylica, polskie/niemieckie/balkanskie diakrytyki: ä ö ü ß č š ć ż ł itd.).
-3. **Slowa-markery**: `wir sind`, `gilde`, `raiden`, `wöchent`, `regrutira`, `igrace`, `igraci`, `aktivne`, `koristimo`, `dopunili`, `rekrutuje`, `rekrutacja`, `szukamy`, `pyc(c)ko/a`, `npurJI`, `koMaH`, `ackoB`, `umpok`.
-4. **Cyrylica zatluszczona ASCII (translit)**: heurystyka per-slowo:
-   - `[a-z][A-Z]` w slowie >=5 znakow (np. `ruJIbgu9l`, `onblmHblx`).
-   - cyfra w srodku slowa: `[A-Za-z]\d[A-Za-z]` (np. `u9eT`, `g9eT`).
-   - 3 lub wiecej kapitalnych w srodku ze slashes/cyframi: `K/\ACCOB!`.
-   - **Prog**: 3+ "podejrzane" slowa w wiadomosci -> non-English.
+1. **Language tags at the start / in the header**: `[RU]`, `[DE]`,
+   `[BR]`, `[ES]`, `[BALKAN]`, `[SR]`, `[BG]`, `[GE]`, `[FR]`, `[IT]`,
+   `[TR]`, `[PL]`, `[CN]`, `[PT]`, `[GR]`, `[HR]`, `[BS]`.
+2. **UTF-8 bytes outside ASCII** - >=5 bytes `> 127` (Cyrillic,
+   Polish/German/Balkan diacritics: ä ö ü ß č š ć ż ł etc.).
+3. **Marker words**: `wir sind`, `gilde`, `raiden`, `wöchent`,
+   `regrutira`, `igrace`, `igraci`, `aktivne`, `koristimo`, `dopunili`,
+   `rekrutuje`, `rekrutacja`, `szukamy`, `pyc(c)ko/a`, `npurJI`,
+   `koMaH`, `ackoB`, `umpok`.
+4. **Cyrillic-as-ASCII (translit)**: per-word heuristic:
+   - `[a-z][A-Z]` in a word >=5 chars (e.g. `ruJIbgu9l`, `onblmHblx`).
+   - digit inside a word: `[A-Za-z]\d[A-Za-z]` (e.g. `u9eT`, `g9eT`).
+   - 3+ uppercase letters in the middle, with slashes/digits:
+     `K/\ACCOB!`.
+   - **Threshold**: 3+ "suspicious" words in a message -> non-English.
 
-W praktyce filtr odrzuca:
-- DE recruit gildii (`<Mahlzeit>`).
+In practice the filter rejects:
+- DE guild recruit (`<Mahlzeit>`).
 - Balkan/SR/HR/BS recruit (`< Balkan Aura > regrutira`).
 - RU translit (`<RES PUBLICA> [RU] ruJIbgu9l npurJIaIIIaeT...`).
-- Polskie/Czeskie/Slowackie wpisy z diakrytykami.
+- Polish/Czech/Slovak entries with diacritics.
 
-**Limitacja:** nie wykrywa krotkich all-caps cyrylica-translit slow (`BCEX`, `HET`). Polega na tym, ze takie slowa zwykle wystepuja razem z innymi sygnalami w tym samym poscie.
+**Limitation:** doesn't catch short all-caps Cyrillic-translit words
+(`BCEX`, `HET`). Relies on the fact that such words usually appear
+together with other signals in the same post.
 
-UI fazy 2 dostaje wynik kroku 4-5: lista aktywnych raidow.
+The phase-2 UI consumes the result of step 4-5: a list of active raids.
 
-## 1. Klasyfikacja wiadomosci
+## 1. Message classification
 
-Tylko klasa **LFM_RAID** jest wstawiana do tabelki. Reszta filtrowana.
+Only the **LFM_RAID** class makes it into the table. Everything else
+is filtered out.
 
-### LFM_RAID (cel)
+### LFM_RAID (target)
 
-Pozytywne sygnaly (kazdy daje punkty, threshold uznaniowy ~2):
-- `LFM` / `#LFM` / `LFR` na poczatku albo po prefixie typu `LFM #3 -`.
-- Wzorzec `(N/M)` gdzie `M in {10, 25}` i `N < M` (`(21/25)`, `22/25`).
-- Slowo `Need` + lista rol (`Need 1 Tank, 2 Heal, 3 Ranged`).
+Positive signals (each scores points, threshold ~2):
+- `LFM` / `#LFM` / `LFR` at the start, or after a prefix like
+  `LFM #3 -`.
+- Pattern `(N/M)` where `M in {10, 25}` and `N < M` (`(21/25)`,
+  `22/25`).
+- The word `Need` followed by a role list (`Need 1 Tank, 2 Heal,
+  3 Ranged`).
 - `last spot`, `1 spot`, `last 4 spot`.
-- Marker kontaktu: `/w me`, `/W ME`, `PST`, `whisper`, `pst me`.
-- Wystepuje **nazwa raidu** (slownik nizej).
+- Contact marker: `/w me`, `/W ME`, `PST`, `whisper`, `pst me`.
+- A **raid name** appears (dictionary below).
 
-Negatywne sygnaly (jakikolwiek = auto-reject, niezaleznie od pozytywow):
-- `<...>` na pierwszych 20 znakach - prawie zawsze nazwa gildii (`<Saronite Mafia> English speaking, recruiting...`).
+Negative signals (any one = auto-reject, regardless of positives):
+- `<...>` in the first 20 chars - almost always a guild name
+  (`<Saronite Mafia> English speaking, recruiting...`).
 - `WTS`, `WTB`, `selling`, `sell`, `buying`, `boost`, `carry`, `GDKP`.
-- `recruiting`, `regrutira`, `rekrutuje`, `looking for raiders`, `looking for active`.
-- Jezyki balkan/DE/RU bez `LFM` - heurystyka: wiadomosc bez `LFM`/`Need`/`(N/M)` w tekscie zwykle = guild recruit.
+- `recruiting`, `regrutira`, `rekrutuje`, `looking for raiders`,
+  `looking for active`.
+- Balkan/DE/RU languages without `LFM` - heuristic: a message without
+  `LFM`/`Need`/`(N/M)` is usually a guild recruit.
 
 ### GUILD_RECRUIT
-- `<GuildName>` + `recruiting` / `regrutira` / `rekrutuje` / `aktivne` / `chill` / `progress`.
-- Czesto z `Discord`, `RT:` (raid time), `DKP`.
+- `<GuildName>` + `recruiting` / `regrutira` / `rekrutuje` / `aktivne`
+  / `chill` / `progress`.
+- Often paired with `Discord`, `RT:` (raid time), `DKP`.
 
 ### BOOST_SELL
-- `WTS LOD`, `WTS LOD/Bane/RS`, `selling boost`, `boost service`, `professional coordination`.
-- `<Final Countdown> End Game Boosting guild recruiting...` - lapie sie podwojnie (boost + guild) → osobna klasa, ale tez out-of-scope dla LFM.
+- `WTS LOD`, `WTS LOD/Bane/RS`, `selling boost`, `boost service`,
+  `professional coordination`.
+- `<Final Countdown> End Game Boosting guild recruiting...` - matches
+  on both axes (boost + guild) → its own class, but still out-of-scope
+  for LFM.
 
 ### ITEM_SELL
-- `SELLING |Hitem:...|h[...]|h|r` - slownie + WoW item link.
+- `SELLING |Hitem:...|h[...]|h|r` - the word + a WoW item link.
 - `marks`, `g/stack`, `COD`.
 
 ### ACHIEVEMENT_RUN
-- `People for [Glory of the Hero] Tank and DPSs /w me` - krotkie, z linkiem `|Hachievement:`, **bez** wzorca raid 25/10.
-- W razie watpliwosci: jezeli sa nazwy boss-mounta osiagniec ale brak `(N/M)` → achievement run.
+- `People for [Glory of the Hero] Tank and DPSs /w me` - short, with
+  an `|Hachievement:` link, **without** a 25/10 raid pattern.
+- When in doubt: if there are boss-mount achievement names but no
+  `(N/M)` → achievement run.
 
 ### DRAMA / OTHER
-- `MATHAME GUILD HALUGAS KICKING PLAYERS...` - oczywiscie "OTHER".
+- `MATHAME GUILD HALUGAS KICKING PLAYERS...` - obviously "OTHER".
 - `Anyone want to do daily?`, `wb`, `gz`, smalltalk.
 
-## 2. Ekstrakcja pol
+## 2. Field extraction
 
-### 2.1 Nazwa raidu (`raid`)
+### 2.1 Raid name (`raid`)
 
-Slownik (regex case-insensitive, **kolejnosc dopasowania od dluzszych do krotszych** zeby `ICC 25 HC` nie zlapal `ICC 10`):
+Dictionary (case-insensitive regex, **match order long-to-short** so
+`ICC 25 HC` doesn't get caught by `ICC 10`):
 
-| Wzorzec wejsciowy (z danych)                            | Znormalizowany kod  |
-|---------------------------------------------------------|---------------------|
-| `ICC25HC`, `ICC 25HC`, `ICC 25 HC`, `ICC-25-HC`, `Icc 25 hc` | `ICC25HC`          |
-| `ICC25NM`, `ICC 25 NM`, `ICC 25 N`, `ICC25`             | `ICC25`             |
-| `ICC10HC`, `ICC 10 hc`, `ICC10 HC`                      | `ICC10HC`           |
-| `ICC10`, `ICC 10`, `ICC 10 NM`, `ICC10 FLEX`            | `ICC10`             |
-| `TOGC 25`, `TOGC25`, `ToGC 25`                          | `TOGC25`            |
-| `TOC 25`, `TOC25`, `TOC 25 NM`, `ToC 25`                | `TOC25`             |
-| `TOC 10`, `TOC10`                                       | `TOC10`             |
-| `RS25HC`, `RS 25 HC`, `RS25 HC`                         | `RS25HC`            |
-| `RS25`, `RS 25`, `RS 25NM`, `RS 25 NM`, `RS25NM`        | `RS25`              |
-| `RS10`, `RS 10`, `RS 10 hc`                             | `RS10` / `RS10HC`   |
-| `VOA25`, `VOA 25`, `Voa25`                              | `VOA25`             |
-| `VOA10`, `VOA 10`                                       | `VOA10`             |
-| `Ulduar`, `ULDUAR`, `Uld 25`                            | `ULDUAR`            |
-| `Naxx`, `NAXX`, `Naxxramas`                             | `NAXX`              |
-| `OS25`, `OS 25`, `OS10`, `Obsidian Sanctum`             | `OS25` / `OS10`     |
-| `LOD` (Lich on Drugs - buffed ICC25 boss farm na Warmane) | `LOD`             |
-| `Bane` (Bane Of The Fallen King - hard mode LK)         | `BANE`              |
+| Input pattern (from data)                                    | Normalized code     |
+|--------------------------------------------------------------|---------------------|
+| `ICC25HC`, `ICC 25HC`, `ICC 25 HC`, `ICC-25-HC`, `Icc 25 hc` | `ICC25HC`           |
+| `ICC25NM`, `ICC 25 NM`, `ICC 25 N`, `ICC25`                  | `ICC25`             |
+| `ICC10HC`, `ICC 10 hc`, `ICC10 HC`                           | `ICC10HC`           |
+| `ICC10`, `ICC 10`, `ICC 10 NM`, `ICC10 FLEX`                 | `ICC10`             |
+| `TOGC 25`, `TOGC25`, `ToGC 25`                               | `TOGC25`            |
+| `TOC 25`, `TOC25`, `TOC 25 NM`, `ToC 25`                     | `TOC25`             |
+| `TOC 10`, `TOC10`                                            | `TOC10`             |
+| `RS25HC`, `RS 25 HC`, `RS25 HC`                              | `RS25HC`            |
+| `RS25`, `RS 25`, `RS 25NM`, `RS 25 NM`, `RS25NM`             | `RS25`              |
+| `RS10`, `RS 10`, `RS 10 hc`                                  | `RS10` / `RS10HC`   |
+| `VOA25`, `VOA 25`, `Voa25`                                   | `VOA25`             |
+| `VOA10`, `VOA 10`                                            | `VOA10`             |
+| `Ulduar`, `ULDUAR`, `Uld 25`                                 | `ULDUAR`            |
+| `Naxx`, `NAXX`, `Naxxramas`                                  | `NAXX`              |
+| `OS25`, `OS 25`, `OS10`, `Obsidian Sanctum`                  | `OS25` / `OS10`     |
+| `LOD` (Lich on Drugs - buffed ICC25 boss farm on Warmane)    | `LOD`               |
+| `Bane` (Bane Of The Fallen King - hard mode LK)              | `BANE`              |
 
-**Niejasne / do potwierdzenia w przyszlych danych:**
-- `LOD` - widoczne w `<Final Countdown> ... 8xLOD 6xICC-25-8/12HC`. Trzymamy jako osobny content.
-- Skroty serwerowe (Warmane-specific) jak `Bane` ida do TODO listy do potwierdzenia.
+**Unclear / to confirm with future data:**
+- `LOD` - seen in `<Final Countdown> ... 8xLOD 6xICC-25-8/12HC`.
+  Tracked as separate content.
+- Server-specific shortcuts (Warmane-specific) like `Bane` are on the
+  TODO list for confirmation.
 
-### 2.2 Rozmiar / trudnosc (`size`, `difficulty`)
+### 2.2 Size / difficulty (`size`, `difficulty`)
 
-- `size in {10, 25}` - z nazwy raidu lub explicit `25 man`/`10 man`/`25 player`.
+- `size in {10, 25}` - from the raid name or explicit `25 man`/`10 man`/`25 player`.
 - `difficulty in {NM, HC}` - mapping:
-  - `HC`, `hc`, `Heroic`, `H` (samo H bez kontekstu nie - false positive) → `HC`.
+  - `HC`, `hc`, `Heroic`, `H` (lone H without context = no, false positive) → `HC`.
   - `NM`, `nm`, `Normal`, `N` → `NM`.
-  - Brak markera + content w {ICC25, RS25, TOC25} → domyslnie `NM` (bo HC zwykle explicit).
+  - No marker + content in {ICC25, RS25, TOC25} → defaults to `NM`
+    (HC is usually explicit).
 
-### 2.3 Postep (`progress`)
+### 2.3 Progress (`progress`)
 
 - `8/12`, `11/12`, `10/12hc` - regex `(\d+)/(\d+)\s*(hc|nm)?`.
-- `FRESH`, `fresh run`, `Fresh 8/12HC RUN` - `fresh = true`, jezeli wyzej jest `8/12` to nadal `8/12` z flaga `fresh`.
-- Dla raidow innych niz ICC25 progress moze byc bez sensu - parsuj tylko jak raid w {ICC25*, ICC10*, TOC25*}.
+- `FRESH`, `fresh run`, `Fresh 8/12HC RUN` - `fresh = true`; if
+  `8/12` is also present, keep `8/12` with the `fresh` flag.
+- For raids other than ICC25, progress may be meaningless - parse only
+  when raid is in {ICC25*, ICC10*, TOC25*}.
 
-### 2.4 Wymagana GS (`gs_min`)
+### 2.4 Required GS (`gs_min`)
 
-Format wejsciowy → normalizacja w 1/10 tysiaca (przyklad `6200`):
+Input format → normalized to units of one (example `6200`):
 
-| Wejscie       | Wyjscie     | Notes                                        |
-|---------------|-------------|----------------------------------------------|
-| `6.2k`, `6,2k`, `6.2K` | `6200`     | przecinek tez                                |
-| `6.2+`, `6,2+`         | `6200+`    | `+` zostaje jako flag `strict_min=false`     |
-| `6.1KK+++`, `6.1KK`    | `6100++`   | `KK` slang Warmane = mocny `+`               |
-| `5800+ gs`, `GS 5800+` | `5800+`    |                                              |
-| `Min 6.2 gs`, `min. 6.2k` | `6200+` |                                              |
+| Input                  | Output      | Notes                                        |
+|------------------------|-------------|----------------------------------------------|
+| `6.2k`, `6,2k`, `6.2K` | `6200`      | comma also accepted                          |
+| `6.2+`, `6,2+`         | `6200+`     | `+` becomes flag `strict_min=false`          |
+| `6.1KK+++`, `6.1KK`    | `6100++`    | `KK` Warmane slang = strong `+`              |
+| `5800+ gs`, `GS 5800+` | `5800+`     |                                              |
+| `Min 6.2 gs`, `min. 6.2k` | `6200+`  |                                              |
 
-Kolejnosc dopasowania: szukaj `min.?\s*gs.?\s*<num>` najpierw, potem standalone liczby przy `gs` / `k+`.
+Match order: look for `min.?\s*gs.?\s*<num>` first, then standalone
+numbers near `gs` / `k+`.
 
-### 2.5 Role potrzebne (`role_needs`)
+### 2.5 Roles needed (`role_needs`)
 
-Najczesciej **strukturalna lista** po slowie `Need`:
+Most often a **structured list** following the word `Need`:
 
 ```
 Need, 1 Tank (BDK), 3 Ranged (BOOMY/HUNTER/MAGE)
@@ -146,11 +177,12 @@ Need 1 Healer (hpala), 1 Melee (fwar/ret), 3 Ranged (boomy/mage/Demo)
 need 2 tanks, 2 healers, 1 mdps, 4 rdps
 ```
 
-Algorytm:
-1. Wytnij segment od `Need` / `need` do nastepnego separatora (`-`, `(`, `Min`, `whisper`, end).
-2. Tokenizuj po `,`.
-3. Dla kazdego tokenu: `<count> <role> [(<class_pref>)]`.
-4. Mapuj role na enum:
+Algorithm:
+1. Slice the segment from `Need` / `need` to the next separator (`-`,
+   `(`, `Min`, `whisper`, end).
+2. Tokenize on `,`.
+3. For each token: `<count> <role> [(<class_pref>)]`.
+4. Map roles to enum:
 
 | Token              | Enum role | Notes                            |
 |--------------------|-----------|----------------------------------|
@@ -160,131 +192,152 @@ Algorytm:
 | `ranged`, `rdps`, `boomy`, `hunter`, `mage`, `sp`, `demo`, `affli`, `ele`, `lock` | `RANGED` |
 | `dps`, `dd` (germ. damage dealer) | `DPS_ANY` |
 
-Specjalne:
+Special:
 - `Need ALL`, `NEED ALL` → `role_needs = { all = true }`.
-- `LFM ICC10 FLEX NEED 1 PPAL/BEAR` → token `PPAL/BEAR` to lista preferencji klas → 1× tank/heal hybrid (tu trzeba flagi `flexible`).
+- `LFM ICC10 FLEX NEED 1 PPAL/BEAR` → token `PPAL/BEAR` is a class
+  preference list → 1× tank/heal hybrid (use `flexible` flag here).
 
-### 2.6 Rezerwy (`reserves`)
+### 2.6 Reserves (`reserves`)
 
-Slang skrytek po nawiasach: `(B+P+DBW RESS)`, `(B-O-P RESS)`, `(SFS RES)`, `(CTS RESS)`, `(muradin ress)`, `(B+P+SFS RES)`.
+Reserve slang in parentheses: `(B+P+DBW RESS)`, `(B-O-P RESS)`,
+`(SFS RES)`, `(CTS RESS)`, `(muradin ress)`, `(B+P+SFS RES)`.
 
-Jednoliterowe oznaczenia w ICC25:
+Single-letter markers in ICC25:
 - `B` - Blood-Queen Lana'thel.
 - `P` - Princes (Blood Princes).
-- `DBW` - Deathbringer Saurfang? `DBS`/`DBW` mieszanka. **TODO** potwierdzic na wiekszej probie.
+- `DBW` - Deathbringer Saurfang? `DBS`/`DBW` mixed up. **TODO**
+  confirm on a larger sample.
 - `SFS` - Sindragosa.
-- `BOE` - chyba slang dla "BoE drops reserved".
-- `LK` - Lich King (jak komus zbiera na LK only).
+- `BOE` - probably slang for "BoE drops reserved".
+- `LK` - Lich King (when someone is collecting LK only).
 
-**Strategia:** nie staramy sie rozwiazywac kazdej litery. Trzymamy:
-- `reserves_raw = "(B+P+DBW RESS)"` (do tooltipa)
+**Strategy:** we don't try to resolve every letter. We keep:
+- `reserves_raw = "(B+P+DBW RESS)"` (for the tooltip)
 - `has_reserves = true`
-- pojedyncze tokeny na liscie `reserves_tokens = ["B", "P", "DBW"]` jezeli kiedys bedziemy chcieli kolorowac.
+- individual tokens in `reserves_tokens = ["B", "P", "DBW"]` if we
+  ever want to color them.
 
-### 2.6b Status Discord (`discord_status`)
+### 2.6b Discord status (`discord_status`)
 
-Trzy stany: `required` / `not_required` / `unknown`.
+Three states: `required` / `not_required` / `unknown`.
 
-**Eksplicytnie WYMAGANE** (ma silne sygnaly):
+**Explicitly REQUIRED** (strong signals):
 - `Discord Mandatory`, `Discord required`, `Discord req`, `Discord must`, `Discord a must`
 - `must have Discord`, `must join Discord`
 - `Voice req`, `Voice mandatory`, `must have voice`, `voice chat req`
 
-**Eksplicytnie NIE WYMAGANE**:
+**Explicitly NOT REQUIRED**:
 - `no discord`, `without discord`, `don't need discord`
 - `no voice`, `no mic`
 - `silent run`, `silent raid`
 
-**Wymagane (implicit)** - link do serwera Discord lub wzmianka oznacza zwykle, ze
-trzeba dolaczyc do serwera zeby dostac inv:
+**Required (implicit)** - a Discord server link or a mention usually
+means you have to join the server to get an invite:
 - `discord.gg/...`, `discord.com/...`
 - `using discord`, `on discord`
-- samo slowo `discord` / `disc` w kontekscie LFM (osobne, otoczone whitespace)
+- the standalone word `discord` / `disc` in an LFM context (whitespace-bounded)
 
-**Unknown** - brak wzmianki.
+**Unknown** - no mention.
 
-W aggregatorze: `unknown` z nowego wpisu nie nadpisuje wczesniejszego konkretu.
-Jezeli pierwszy post mowil "Discord required" a drugi nic nie mowi o discord,
-status zostaje `required`.
+In the aggregator: `unknown` from a new entry does not overwrite a
+prior concrete value. If the first post said "Discord required" and
+the second one is silent on the matter, status stays `required`.
 
 ### 2.7 Achievement requirement (`ach_req`)
 
-Trzy formy:
-1. Slowna: `ACHIV MUST`, `ACHI`, `achiv`, `achiv must`, `link achi`.
-2. Link osiagniecia w wiadomosci: `|cffffff00|Hachievement:NUMBER:GUID:...|h[Name]|h|r`.
-3. Numer ID osiagniecia (np. `3819` to TOC25 "Tribute to Insanity"; `4584` to ICC25 "Light of Dawn").
+Three forms:
+1. Word: `ACHIV MUST`, `ACHI`, `achiv`, `achiv must`, `link achi`.
+2. Achievement link in the message:
+   `|cffffff00|Hachievement:NUMBER:GUID:...|h[Name]|h|r`.
+3. Achievement ID number (e.g. `3819` is TOC25 "Tribute to Insanity";
+   `4584` is ICC25 "Light of Dawn").
 
-Jezeli jest link, wyciagnij `name` (cala wartosc miedzy `[` a `]`).
+If a link is present, extract `name` (the entire value between `[` and
+`]`).
 
-### 2.8 Aktualnie / max (`current`, `max`)
+### 2.8 Current / max (`current`, `max`)
 
-Regex: `\((\d{1,2})/(\d{1,2})\)` lub `(\d{1,2})/(\d{1,2})\s*$`.
+Regex: `\((\d{1,2})/(\d{1,2})\)` or `(\d{1,2})/(\d{1,2})\s*$`.
 
-Walidacja: `max in {10, 25}`, `current <= max`.
+Validation: `max in {10, 25}`, `current <= max`.
 
-Jezeli brak - nie wnioskuj.
+If absent - don't infer.
 
-### 2.9 Kontakt / lider
+### 2.9 Contact / leader
 
-Najczesciej autor wpisu (`a`). Wyjatki:
-- `@memo` w tresci - rzeczywisty lider to ktos inny (przyklad: Shyyshyy + Deodora oboje wysylaja `@memo`, czyli memo jest faktycznym liderem).
-- `/w <NickName>` - moze wskazywac innego inv-managera.
+Most often the message author (`a`). Exceptions:
+- `@memo` in the body - the actual leader is someone else (example:
+  Shyyshyy + Deodora both post `@memo`, so memo is the actual leader).
+- `/w <NickName>` - may indicate a different invite manager.
 
-Faza 1 trzymamy `posted_by = author`, ale dodajemy heurystyke `actual_leader = @<nick>` jezeli wystapi.
+In phase 1 we keep `posted_by = author`, but add a heuristic
+`actual_leader = @<nick>` when one appears.
 
-## 3. Deduplikacja
+## 3. Deduplication
 
-Najwazniejsza i najtrudniejsza czesc. W danych prawie kazdy LFM ma 4-8 kopii (multi-channel + repost).
+The most important and trickiest part. In the data, almost every LFM
+has 4-8 copies (multi-channel + reposts).
 
-**Dwa klucze dedup, sprawdzane w kolejnosci:**
+**Two dedup keys, checked in order:**
 
-1. `msg_normalized` - identyczna lub bardzo podobna tresc (lowered, bez interpunkcji,
-   bez `(N/M)` na koncu, bez `#1` na poczatku, max 100 znakow). Lapie:
-   - multi-channel: ten sam tekst na Trade + Global + LFG.
-   - multi-officer: rozni autorzy z idealnie identycznym tekstem (oficerowie tego
-     samego raidu, np. `Shyyshyy` + `Deodora` + `@memo`).
-2. `(author, raid_name)` - jezeli msg_key nie pasuje, ale ten sam autor juz prowadzi
-   ogloszenie tego samego raidu - merge. Lapie:
-   - autor edytuje tresc (`Need ALL` -> `Need 1 ppal` gdy reszta sie zapelnila).
-   - autor zmienia formatowanie miedzy postami.
-   - dwie wersje tego samego ogloszenia w odstepie minut.
+1. `msg_normalized` - identical or near-identical body (lowered, no
+   punctuation, no trailing `(N/M)`, no leading `#1`, max 100 chars).
+   Catches:
+   - multi-channel: same text on Trade + Global + LFG.
+   - multi-officer: different authors with literally identical text
+     (officers of the same raid, e.g. `Shyyshyy` + `Deodora` +
+     `@memo`).
+2. `(author, raid_name)` - if the msg key doesn't match but the same
+   author already runs a posting for the same raid - merge. Catches:
+   - author edits the body (`Need ALL` -> `Need 1 ppal` once the rest
+     filled).
+   - author changes formatting between posts.
+   - two versions of the same posting minutes apart.
 
-Indeksy `state.by_msg` i `state.by_author_raid` sa aktualizowane przy KAZDYM
-hit/update, wiec nastepne wpisy z dowolna pasujaca trescia LUB tym samym
-(author, raid) trafiaja do tej samej pozycji.
+The `state.by_msg` and `state.by_author_raid` indices are updated on
+every hit/update, so subsequent entries with any matching body OR the
+same `(author, raid)` land on the same record.
 
-### 3.1 Multi-channel (ten sam autor, ten sam tekst, +/- 5s)
+### 3.1 Multi-channel (same author, same text, +/- 5s)
 
-Z danych: `Shyyshyy` postuje TEN SAM tekst na `Trade-City`, `LookingForGroup`, `Global` w odstepie 0-3 sek.
+From the data: `Shyyshyy` posts THE SAME text on `Trade-City`,
+`LookingForGroup`, `Global` within 0-3 seconds.
 
-Klucz dedup: `(author_lower, msg_normalized)`, okno 30 sek, lista `channels = []` rosnie.
+Dedup key: `(author_lower, msg_normalized)`, 30s window, growing
+`channels = []` list.
 
-### 3.2 Repost spam (ten sam autor, ten sam tekst, periodyczny)
+### 3.2 Repost spam (same author, same text, periodic)
 
-Ten sam Shyyshyy co 30-60 sek. powtarza ogloszenie. Dla nas to **odswiezenie** raidu, nie nowy raid.
+The same Shyyshyy reposts every 30-60 sec. For us this is a **refresh**
+of the raid, not a new raid.
 
-Klucz: `(author_lower, msg_normalized)` bez okna - ten sam raid, `last_seen = max(t)`, `posts += 1`.
+Key: `(author_lower, msg_normalized)` without a window - same raid,
+`last_seen = max(t)`, `posts += 1`.
 
-### 3.3 Multi-officer (rozni autorzy, ten sam tekst)
+### 3.3 Multi-officer (different authors, same text)
 
-Z danych: `Shyyshyy` i `Deodora` wysylaja **literalnie identyczny** tekst (`LFM #3 - ICC 25HC ... @memo ...`). Najpewniej oficerowie tego samego raidu.
+From the data: `Shyyshyy` and `Deodora` send **literally identical**
+text (`LFM #3 - ICC 25HC ... @memo ...`). Most likely officers of the
+same raid.
 
-Klucz dedup: `msg_normalized` (bez authora), traktuj jako jeden raid z `posters = ["Shyyshyy", "Deodora"]`. Lider = `@memo` jezeli jest, w przeciwnym razie pierwszy `poster`.
+Dedup key: `msg_normalized` (no author), treat as one raid with
+`posters = ["Shyyshyy", "Deodora"]`. Leader = `@memo` if present,
+otherwise the first `poster`.
 
-### 3.4 Co znaczy `msg_normalized`
+### 3.4 What `msg_normalized` means
 
 ```
 1. Lowercase.
-2. Usun WoW-tags (|c..|H..|h..|h|r).
-3. Usun znaki interpunkcyjne i wielokrotne spacje.
-4. Usun (N/M) na koncu - bo to sie zmienia gdy ktos dolaczy.
-5. Usun `#1`, `#2`, `#3` na poczatku - to numerator wpisu, nie raid.
-6. Wez pierwsze 100 znakow.
+2. Strip WoW tags (|c..|H..|h..|h|r).
+3. Strip punctuation and collapse runs of spaces.
+4. Strip trailing (N/M) - it changes when someone joins.
+5. Strip leading `#1`, `#2`, `#3` - those are post counters, not a raid.
+6. Take the first 100 chars.
 ```
 
-Po normalizacji `(20/25)` vs `(21/25)` to ten sam raid.
+After normalization, `(20/25)` and `(21/25)` are the same raid.
 
-## 4. Agregacja - struktura raidu
+## 4. Aggregation - raid struct
 
 ```lua
 ActiveRaid = {
@@ -299,12 +352,12 @@ ActiveRaid = {
   current_in_group = 21, max_in_group = 25,
   posters = { ["Shyyshyy"] = true, ["Deodora"] = true },
   primary_poster = "Shyyshyy",
-  actual_leader = "memo",                -- jezeli @nick
+  actual_leader = "memo",                -- if @nick is present
   channels = { ["Trade - City"] = true, ["global"] = true, ... },
-  first_seen = 1778169087,                -- pierwszy wpis OD MOMENTU zalogowania nas
+  first_seen = 1778169087,                -- first post AFTER our login
   last_seen = 1778172977,
   posts_count = 14,
-  raw_message = "...pelna ostatnia wiadomosc do tooltipa...",
+  raw_message = "...full last message for the tooltip...",
   classified_as = "LFM_RAID",
 }
 ```
@@ -312,36 +365,59 @@ ActiveRaid = {
 ## 5. Lifecycle
 
 - `active`: `now - last_seen <= 2*60`.
-- `inactive` (szare w tabeli, nie usuwane): `2*60 < now - last_seen <= 5*60`.
-- `drop` (znika): `now - last_seen > 5*60`.
+- `inactive` (greyed in the table, not removed): `2*60 < now - last_seen <= 5*60`.
+- `drop` (disappears): `now - last_seen > 5*60`.
 
-Liczone od **last_seen** (najpozniejszy wpis), nie od `first_seen`.
+Counted from **last_seen** (the most recent post), not from
+`first_seen`.
 
-"Ile zbiera" = `now - first_seen`, gdzie first_seen to **pierwsza obserwacja przez nas po zalogowaniu** (a nie od kiedy on faktycznie zaczal - tego nie wiemy z chatu).
+"How long they've been collecting" = `now - first_seen`, where
+`first_seen` is **the first observation by us after login** (not from
+when they actually started - we can't know that from chat).
 
-## 6. Edge cases zaobserwowane w danych
+## 6. Edge cases observed in the data
 
-- **Cyrylica zatluszczona ASCII**: `ruJIbgu9l npurJIaIIIaeT` - to `russkij priglashaet` w transliteracji "obejscie czarnej listy". Heurystyka: jezeli > 30% slow zawiera mieszane kapitalne litery + cyfry typu `JI`, `9l`, `IIII`, oznaczamy `lang_hint = "RU"` i traktujemy jako GUILD_RECRUIT (bo prawie zawsze jest).
-- **Kilka jezykow w jednym poscie**: `<<< B PycckyI0 PVE Guild ... >>>` - guild recruit RU.
-- **Zaden raid name nie wystapil, ale jest LFM**: rare. `LFM hpala for normal run` bez nazwy → klasa `LFM_RAID` z `raid = "?"`. Trzymamy, bo lepsze niz drop.
-- **Achievement-only ogłoszenia**: `People for [Glory of the Hero]` - osobna klasa `ACHIEVEMENT_RUN`. Faza 1 nie pokazujemy. Faza 3 - moze osobna sekcja.
-- **Pomieszane size/diff**: `ICC10 FLEX` - `flex` to czesto skrot dla "flexibility na klasy/role", nie nowy difficulty z retail. Traktuj jako ICC10 NM.
-- **Linki itemow w ItemSell**: `|cffffffff|Hitem:40211:...|h[Potion of Speed]|h|r` - jezeli prefix `SELLING` lub `WTS`, klasa `ITEM_SELL`.
+- **Cyrillic-as-ASCII**: `ruJIbgu9l npurJIaIIIaeT` - that's
+  `russkij priglashaet` transliterated to dodge a blacklist.
+  Heuristic: if > 30% of words contain mixed uppercase letters + digits
+  like `JI`, `9l`, `IIII`, mark `lang_hint = "RU"` and treat as
+  GUILD_RECRUIT (it almost always is).
+- **Multiple languages in one post**: `<<< B PycckyI0 PVE Guild ... >>>`
+  - RU guild recruit.
+- **No raid name appears, but there is LFM**: rare. `LFM hpala for
+  normal run` without a name → class `LFM_RAID` with `raid = "?"`.
+  Keep it - better than dropping.
+- **Achievement-only postings**: `People for [Glory of the Hero]` - own
+  class `ACHIEVEMENT_RUN`. Phase 1 doesn't show them. Phase 3 - maybe
+  a separate section.
+- **Mixed size/diff**: `ICC10 FLEX` - `flex` is usually shorthand for
+  "flexibility on classes/roles", not retail's new difficulty. Treat
+  as ICC10 NM.
+- **Item links in ItemSell**:
+  `|cffffffff|Hitem:40211:...|h[Potion of Speed]|h|r` - if prefixed
+  with `SELLING` or `WTS`, class `ITEM_SELL`.
 
-## 7. Co bedzie wymagalo wiekszej probki
+## 7. What needs a larger sample
 
-- Slownik **rezerw** (skroty bossow).
-- Walidacja czy `LOD` to osobny content czy slang ICC25.
-- Polskie wzorce - w obecnej probce ich brak (Warmane = miedzynarodowy, EN dominant).
-- Achievement run - male probki, trudno zbudowac heurystyki.
-- Detekcja "raid juz w trakcie" vs "wciaz zbiera" - moze patrzec na frazy "in raid", "fast inv", "starting now" vs "still need".
+- **Reserve dictionary** (boss shortcuts).
+- Validation whether `LOD` is separate content or ICC25 slang.
+- Polish patterns - absent in the current sample (Warmane =
+  international, EN dominant).
+- Achievement runs - small sample, hard to build heuristics.
+- Detection of "raid already in progress" vs "still recruiting" -
+  maybe look at phrases "in raid", "fast inv", "starting now" vs
+  "still need".
 
-## 8. Plan testow
+## 8. Test plan
 
-Po napisaniu parsera (Lua module) zbudujemy zestaw testow opartych o `data/samples/`:
+Once the parser (Lua module) is written, build a test set against
+`data/samples/`:
 
-1. Lista oczekiwanych klasyfikacji dla 50 reprezentatywnych wpisow (recznie etykietowane w `docs/sample-postings.md`).
-2. Snapshot ekstrakcji dla 20 LFM-RAID - oczekiwane `raid`, `gs_min`, `role_needs`, `reserves`.
-3. Snapshot deduplikacji - oczekiwana liczba `ActiveRaid` po przejsciu calego pliku.
+1. Expected classifications for 50 representative entries (manually
+   labeled in `docs/sample-postings.md`).
+2. Extraction snapshot for 20 LFM-RAID - expected `raid`, `gs_min`,
+   `role_needs`, `reserves`.
+3. Dedup snapshot - expected `ActiveRaid` count after running the
+   whole file.
 
-Standalone runner (`scripts/parse-test.lua`) - bedzie w fazie 2.
+A standalone runner (`scripts/parse-test.lua`) - to come in phase 2.

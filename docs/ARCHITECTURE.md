@@ -1,73 +1,78 @@
-# Architektura
+# Architecture
 
-## Layout repo
+## Repo layout
 
 ```
 lfg-scanner/
 ├── README.md
 ├── docs/
-│   ├── ARCHITECTURE.md     # ten plik
-│   └── PHASES.md           # plan fazowy
-├── addons/                 # KAZDY podkatalog = osobny addon WoW
+│   ├── ARCHITECTURE.md     # this file
+│   └── PHASES.md           # phase plan
+├── addons/                 # EACH subdirectory = one WoW addon
 │   └── LFGScannerLogger/
 │       ├── LFGScannerLogger.toc
 │       └── LFGScannerLogger.lua
 └── scripts/
-    └── deploy.sh           # rsync do Interface/AddOns
+    └── deploy.sh           # rsync into Interface/AddOns
 ```
 
-Konwencja: jeden addon = jeden katalog w `addons/`. Skrypt deploya po prostu
-kopiuje kazdy taki katalog 1:1 do `Interface/AddOns/`.
+Convention: one addon = one directory under `addons/`. The deploy
+script just copies each such directory 1:1 into `Interface/AddOns/`.
 
-## API WoW (3.3.5a / interface 30300) - co uzywamy
+## WoW API (3.3.5a / interface 30300) - what we use
 
-### Eventy
+### Events
 
-- `CHAT_MSG_CHANNEL` - wpis na kanale numerycznym (general/global/trade/...).
-  Argumenty: `msg, author, language, channelString, target, flags, zoneChannelID, channelIndex, channelBaseName, unused, lineID, guid`.
-- `PLAYER_LOGIN` - moment startu sesji (mierzymy "od kiedy zbiera").
-- `ADDON_LOADED` - inicjalizacja SavedVariables.
+- `CHAT_MSG_CHANNEL` - a numeric-channel post (general/global/trade/...).
+  Args: `msg, author, language, channelString, target, flags, zoneChannelID, channelIndex, channelBaseName, unused, lineID, guid`.
+- `PLAYER_LOGIN` - session start (used to mark "since when we are listening").
+- `ADDON_LOADED` - SavedVariables init.
 
-### Rozpoznawanie kanalow
+### Channel detection
 
-`channelBaseName` to zlokalizowana, "krotka" nazwa - np. `General`. Dla
-zone-channelow `channelString` zwykle wyglada jak `"General - Dalaran"`.
-Customowe kanaly (Warmane: `global`, `world`) maja `channelBaseName == channelString`.
+`channelBaseName` is the localized "short" name - e.g. `General`. For
+zone channels, `channelString` typically reads `"General - Dalaran"`.
+Custom channels (Warmane: `global`, `world`) have
+`channelBaseName == channelString`.
 
-Zeby nie martwic sie o lokalizacje klienta, dopasowujemy lowercase + substring
-po liscie patternow `general/global/trade/...`. Faza 2 moze bardziej rygorystycznie
-filtrowac.
+To stay locale-agnostic, we match on lowercase + substring against a
+list of patterns: `general/global/trade/...`. Phase 2 may filter more
+strictly.
 
 ### Persistence
 
-- `## SavedVariables: LFGScannerLoggerDB` w `.toc` -> globalna tabela `LFGScannerLoggerDB`.
-- Zapisywana przez WoW na `/reload` i przy logout.
-- Lokalizacja na dysku: `WTF/Account/<ACCOUNT>/SavedVariables/<AddonName>.lua`.
+- `## SavedVariables: LFGScannerLoggerDB` in `.toc` -> global
+  `LFGScannerLoggerDB` table.
+- Flushed by WoW on `/reload` and on logout.
+- On-disk path: `WTF/Account/<ACCOUNT>/SavedVariables/<AddonName>.lua`.
 
-### Czas
+### Time
 
-- `time()` - epoch sekundy. Tego uzywamy.
-- `GetTime()` - sekundy od startu klienta (float). NIE persystowac.
-- `date(fmt, t)` - format czasu (uzywamy do print).
+- `time()` - epoch seconds. We use this.
+- `GetTime()` - seconds since client start (float). Do NOT persist.
+- `date(fmt, t)` - timestamp formatting (used for print).
 
-## Decyzje projektowe
+## Design decisions
 
-- **Skrocone klucze w `entries` (`t/a/c/m`...)** - przy 50k wpisow rozmiar
-  pliku Lua przy pelnych nazwach (`timestamp/author/channel/message`)
-  rosnie zauwazalnie. Skroty oszczedzaja kilkadziesiat % rozmiaru.
-- **Zapis "co leci" zamiast filtrowanego LFM** - na etapie zbierania nie
-  wiemy jeszcze jak wyglada idealny wzorzec. Logger ma byc glupi i wierny.
-- **Sesje jako osobna tabela** - "ile czasu autor juz zbiera" liczone
-  bedzie od `first_seen` w aggregatorze fazy 2, ale info o starcie sesji gracza
-  obserwujacego trzymamy juz teraz (przyda sie do roznicowania "zbiera od
-  poczatku mojej sesji" vs "doszedl pozniej").
-- **Brak zewnetrznych libek** (Ace3, LibStub) w fazie 1 - zerowe zaleznosci,
-  jeden plik. W fazie 2 mozemy sie zastanowic nad Ace3 dla UI/options.
+- **Short keys in `entries` (`t/a/c/m`...)** - at 50k entries the Lua
+  file size with full names (`timestamp/author/channel/message`) grows
+  noticeably. The short keys save a few tens of percent.
+- **Log "whatever comes" rather than filtered LFM** - at the collection
+  stage we don't yet know the ideal pattern. The logger should be dumb
+  and faithful.
+- **Sessions as a separate table** - "how long the leader has been
+  collecting" will be computed from `first_seen` in the phase-2
+  aggregator, but we already track when our observing player's session
+  started (useful to distinguish "was already recruiting when I logged
+  in" vs "started later").
+- **No external libs** (Ace3, LibStub) in phase 1 - zero dependencies,
+  one file. In phase 2 we may consider Ace3 for UI/options.
 
 ## Deploy / dev loop
 
-1. Edycja w `addons/LFGScannerLogger/*`.
+1. Edit in `addons/LFGScannerLogger/*`.
 2. `./scripts/deploy.sh LFGScannerLogger`.
-3. W grze `/reload`.
+3. In-game `/reload`.
 4. Test, `/lfglog stats`.
-5. Wyciagniecie danych: skopiuj `WTF/Account/PIPOKP/SavedVariables/LFGScannerLogger.lua` do repo (np. do `data/samples/`, gitignore-owane) i analizuj.
+5. Pull data: copy `WTF/Account/PIPOKP/SavedVariables/LFGScannerLogger.lua`
+   into the repo (e.g. into `data/samples/`, gitignored) and analyze.

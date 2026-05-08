@@ -1,7 +1,7 @@
 --[[
   LFGScanner - core / namespace.
-  Inicjalizuje globalna tablice addonu i wspolne utilsy.
-  Pozostale moduly (parser, aggregator, ui, main) doczepiaja sie jako pola.
+  Initializes the addon's global table and shared utilities.
+  Other modules (parser, aggregator, ui, main) attach themselves as fields.
 ]]
 
 LFGScanner = LFGScanner or {}
@@ -11,19 +11,19 @@ A.NAME = "LFGScanner"
 A.VERSION = "0.1.0"
 
 A.LIFECYCLE = {
-  ACTIVE_MAX_AGE = 2 * 60,    -- ponad 2 min ciszy -> wiersz szarzeje (inactive)
-  INACTIVE_MAX_AGE = 5 * 60,  -- ponad 5 min ciszy -> wiersz znika z listy
+  ACTIVE_MAX_AGE = 2 * 60,    -- silence > 2 min -> row greys out (inactive)
+  INACTIVE_MAX_AGE = 5 * 60,  -- silence > 5 min -> row drops from the list
 }
 
--- runtime cache (nie persystowany)
+-- runtime cache (not persisted)
 A.state = {
   raids = {},            -- aggregator: id -> ActiveRaid
-  by_msg = {},           -- msg_normalized -> id (dedup multi-officer)
-  by_author_raid = {},   -- "author|raid" -> id (dedup tego samego autora ewoluujacego LFM)
-  login_time = 0,        -- ustawiane w PLAYER_LOGIN
+  by_msg = {},           -- msg_normalized -> id (multi-officer dedup)
+  by_author_raid = {},   -- "author|raid" -> id (dedup of the same author's evolving LFM)
+  login_time = 0,        -- set on PLAYER_LOGIN
 }
 
--- defaulty SavedVariables
+-- SavedVariables defaults
 A.DB_DEFAULTS = {
   meta = { version = 1 },
   ui = {

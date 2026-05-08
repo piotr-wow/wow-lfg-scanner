@@ -1,8 +1,8 @@
 --[[
   LFGScanner.UI
-  Plywajaca tabelka aktywnych raidow.
-  v1: bez scrolla (15 widocznych wierszy), movable, resizable, z tooltipem
-  pelnej tresci na hover. LMB = whisper.
+  Floating active-raid table.
+  v1: no scrolling (15 visible rows), movable, resizable, with a tooltip
+  showing the full body on hover. LMB = whisper.
 ]]
 
 LFGScanner = LFGScanner or {}
@@ -19,7 +19,7 @@ local PADDING = 6
 local TAB_WIDTH = 64
 local TAB_GAP = 2
 
--- Ukladamy kolumny: { key, header, width }
+-- Column layout: { key, header, width }
 UI.COLUMNS = {
   { key = "raid",     header = "Raid",   width = 80 },
   { key = "progress", header = "Prog",   width = 60 },
@@ -32,8 +32,8 @@ UI.COLUMNS = {
   { key = "extras",   header = "+",      width = 40 },  -- ach + reserves icons
 }
 
--- Grupy raidow na zakladkach. "ALL" = bez filtra. "OTHER" = wszystko nie pasujace
--- do zadnej innej grupy.
+-- Raid groups for the tabs. "ALL" = no filter. "OTHER" = anything that
+-- doesn't match any other group.
 UI.RAID_GROUPS = {
   { id = "ALL",   label = "All" },
   { id = "ICC25", label = "ICC25", raids = { ICC25 = true, ICC25HC = true } },
@@ -101,15 +101,15 @@ local function fmtGroup(raid)
 end
 
 local function fmtAge(raid, now)
-  -- "Age" = ile czasu minelo od OSTATNIEGO posta. Resetuje sie przy kazdym
-  -- repost - rosnaca wartosc oznacza, ze poster milczy (zaraz inactive / drop).
+  -- "Age" = time since the LAST post. Resets on every repost - a rising
+  -- value means the poster has gone quiet (heading toward inactive / drop).
   return A.formatAge(now - (raid.last_seen or now))
 end
 
 local function fmtPoster(raid)
-  -- Pokazujemy AUTORA wpisu (primary_poster) - to gwarantowany nick gracza.
-  -- raid.actual_leader (z @nick w tresci) to czesto alias/pseudonim, nie da sie
-  -- do niego /w. Trafia tylko do tooltipa jako "Leader (@)".
+  -- Display the post AUTHOR (primary_poster) - guaranteed real character name.
+  -- raid.actual_leader (from @nick in the body) is often an alias / pseudonym
+  -- that can't be /w'ed. It only ends up in the tooltip as "Leader (@)".
   return raid.primary_poster or "?"
 end
 
@@ -145,7 +145,7 @@ end
 -- =============================================================
 
 local function applyBackdrop(frame, alpha)
-  -- 3.3.5a - SetBackdrop bezposrednio
+  -- 3.3.5a - SetBackdrop directly on the frame
   frame:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -156,11 +156,11 @@ local function applyBackdrop(frame, alpha)
   frame:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
 end
 
--- Quick-actions: kliki wysylaja gotowe pytania do autora wpisu (primary_poster).
--- key  - litera na buttonku
--- text - tresc wiadomosci wysylanej /w
--- color - kolor tekstu na buttonku
--- tip  - tooltip
+-- Quick-actions: clicks send a canned question to the post author (primary_poster).
+-- key   - letter on the button
+-- text  - body of the /w message
+-- color - text color on the button
+-- tip   - tooltip
 UI.ROW_ACTIONS = {
   { key = "D", text = "discord required?", color = {0.4, 0.8, 1},  tip = "Ask: discord required?" },
   { key = "R", text = "any reserves?",     color = {1, 0.6, 0.4},  tip = "Ask: any reserves?" },
@@ -212,8 +212,8 @@ local function makeRow(parent, index)
     x = x + col.width
   end
 
-  -- Quick-action buttons (right-anchored). Iterujemy od konca tablicy zeby
-  -- pierwsza akcja w UI.ROW_ACTIONS byla najbardziej na LEWO (czytanie D-R-G).
+  -- Quick-action buttons (right-anchored). Iterate from the end of the array
+  -- so the first action in UI.ROW_ACTIONS sits leftmost (read order D-R-G).
   row.actionBtns = {}
   local prev = nil
   for i = #UI.ROW_ACTIONS, 1, -1 do
@@ -241,7 +241,7 @@ local function makeRow(parent, index)
     table.insert(row.actionBtns, btn)
     prev = btn
   end
-  -- Highlight przy hover
+  -- Hover highlight
   local hl = row:CreateTexture(nil, "HIGHLIGHT")
   hl:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
   hl:SetBlendMode("ADD")
@@ -275,7 +275,7 @@ local function makeRow(parent, index)
   row:SetScript("OnClick", function(self, button)
     if not self.raid then return end
     if button == "LeftButton" then
-      -- /w idzie do AUTORA wpisu, nie do @nick z tresci (czesto alias).
+      -- /w goes to the post AUTHOR, not the @nick from the body (often an alias).
       local target = self.raid.primary_poster
       if target then
         ChatFrame_OpenChat("/w " .. target .. " ")
@@ -314,7 +314,7 @@ function UI.Init()
   f:EnableMouse(true)
   applyBackdrop(f, 0.88)
 
-  -- Tytul / drag bar
+  -- Title / drag bar
   local title = CreateFrame("Frame", nil, f)
   title:SetHeight(TITLEBAR_HEIGHT)
   title:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
@@ -347,7 +347,7 @@ function UI.Init()
   statusText:SetText("0 raids")
   f.statusText = statusText
 
-  -- Resize handle (prawy dolny rog)
+  -- Resize handle (bottom-right corner)
   local resize = CreateFrame("Button", nil, f)
   resize:SetSize(16, 16)
   resize:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
@@ -400,13 +400,13 @@ function UI.Init()
     x = x + TAB_WIDTH + TAB_GAP
   end
 
-  -- Header tabeli (pod tab barem)
+  -- Table header (under the tab bar)
   local header = makeHeader(f)
   header:SetPoint("TOPLEFT", tabBar, "BOTTOMLEFT", PADDING, -2)
   header:SetPoint("TOPRIGHT", tabBar, "BOTTOMRIGHT", -PADDING, -2)
   f.header = header
 
-  -- Wiersze - bedziemy tworzyc dynamicznie zaleznie od wysokosci
+  -- Rows - created dynamically depending on the height
   f.rows = {}
   UI.frame = f
 
@@ -427,7 +427,7 @@ local function ensureRows(count)
     row:SetPoint("RIGHT", f, "RIGHT", 0, 0)
     f.rows[i] = row
   end
-  -- przepozycjonuj wszystkie
+  -- reposition all of them
   for i, row in ipairs(f.rows) do
     row:ClearAllPoints()
     row:SetPoint("TOPLEFT", f.header, "BOTTOMLEFT", 0, -((i - 1) * ROW_HEIGHT))
@@ -444,7 +444,7 @@ function UI.Refresh()
   local total = A.Aggregator.count()
   local selected_id = (A.db and A.db.ui.selected_tab) or "ALL"
 
-  -- Aktualizuj liczniki na zakladkach + podswietl aktywna
+  -- Update tab counts and highlight the active one
   local selected_group = nil
   for _, group in ipairs(UI.RAID_GROUPS) do
     local count = 0
@@ -466,7 +466,7 @@ function UI.Refresh()
     end
   end
 
-  -- Filtruj po wybranej zakladce
+  -- Filter by the selected tab
   local raids
   if not selected_group or selected_group.id == "ALL" then
     raids = all_raids
@@ -477,7 +477,7 @@ function UI.Refresh()
     end
   end
 
-  -- Ile wierszy zmiesci sie w aktualnej wysokosci
+  -- How many rows fit at the current height
   local available_height = f:GetHeight() - TITLEBAR_HEIGHT - TABBAR_HEIGHT - HEADER_HEIGHT - STATUSBAR_HEIGHT - 4
   local row_count = math.max(1, math.floor(available_height / ROW_HEIGHT))
   ensureRows(row_count)
