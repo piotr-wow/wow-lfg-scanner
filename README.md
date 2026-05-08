@@ -1,114 +1,158 @@
 # LFG Scanner
 
-WoW WotLK 3.3.5a addon that watches `/global` and `/general` (Dalaran)
-chat for active raid LFM postings and presents them in a table: which
-raid, what's needed, which roles, which reserves, how long the leader
-has been recruiting.
+Live raid-LFM tracker for WoW WotLK 3.3.5a (Warmane). Stop scrolling
+chat to find a raid - the addon reads `/general`, `/global`, `/trade`,
+`/world`, and `/lookingforgroup` for you and shows every active LFM in
+one clean, deduplicated table.
 
-The repo holds multiple addons under `addons/` sharing one deploy script.
+![LFG Scanner in Dalaran](docs/img/main.png)
+
+## What you get
+
+- **One row per raid, not eight.** Multi-channel posts, reposts, and
+  multi-officer cross-posts collapse into a single entry.
+- **At-a-glance info:** raid + difficulty (`ICC25HC`), boss progress
+  (`8/12`), required GearScore, roles still needed, group fill
+  (`21/25`), Discord required (yes/no/?), and how long since the last
+  repost.
+- **Live freshness.** The `Age` column ticks up every second since the
+  poster's last message. After 2 min of silence the row greys out;
+  after 5 min it drops off.
+- **One-click whisper.** Click any row to open `/w <poster>`. Or use
+  the per-row quick-action buttons to send a canned question:
+  - **D** - "discord required?"
+  - **R** - "any reserves?"
+  - **G** - "min gs?"
+- **Filter by content.** Tabs across the top: `All`, `ICC25`, `ICC10`,
+  `TOC25`, `TOC10`, `RS25`, `RS10`, `VOA`, `Other` (with a live count
+  next to each).
+- **Stable row order.** Rows are sorted by when they first appeared,
+  so existing entries don't jump around when someone reposts.
+- **Tooltip on hover** shows the full original posting, list of
+  posters, channels it was seen on, post count, and the `@nick` leader
+  if mentioned.
+- **Filtered noise.** Guild recruitment, boost-selling, item-selling,
+  achievement-run-only postings, and non-English chat (RU translit,
+  DE, SR, etc.) are detected and excluded.
+
+## Install
+
+1. Download the latest `LFGScanner-x.y.z.zip` from the
+   [Releases](../../releases/latest) page.
+2. Unzip into your client's `Interface/AddOns/` folder. The ZIP
+   already contains a top-level `LFGScanner/` directory - put it next
+   to your other addons.
+3. Log in (or `/reload`). On Warmane, make sure "Load out of date
+   AddOns" is checked on the character select screen.
+
+## Usage
+
+The `LFG Scanner` frame appears automatically after login. Drag the
+title bar to move it; grab the bottom-right corner to resize. Layout
+is remembered.
+
+### Slash commands
+
+| Command           | Effect                                      |
+|-------------------|---------------------------------------------|
+| `/lfg`            | toggle window                               |
+| `/lfg show`       | show window                                 |
+| `/lfg hide`       | hide window                                 |
+| `/lfg reset`      | clear the active-raid table                 |
+| `/lfg stats`      | print the number of tracked raids           |
+| `/lfg resetpos`   | restore default frame position and size     |
+
+### Reading the table
+
+```
+Raid       Prog      GS     Disc  Needs       Group  Age   Poster      +
+ICC25HC    8/12 HC   6.2k+  YES   T1 R3       21/25  0:14  Shyyshyy   AR  [D][R][G]
+RS25       -         5.8k+  ?     R1          24/25  0:42  Bagulor    A   [D][R][G]
+```
+
+- `Needs`: `T`/`H`/`M`/`R`/`D` = tank/heal/melee/ranged/dps. `T1 R3` =
+  one tank + three ranged. `ALL` (orange) means the poster wrote
+  "Need ALL".
+- `+` column flags: `A` = achievement required, `R` = has a reserves
+  block.
+- Inactive rows (no post for 2-5 min) are dimmed; they disappear after
+  5 min of silence.
+
+## Compatibility
+
+- WoW 3.3.5a (Wrath of the Lich King). Tested on Warmane Icecrown.
+- Pure Lua, no external library dependencies (no Ace3, no LibStub).
+
+---
 
 ## Status
 
-**Phase 1 (done):** `LFGScannerLogger` - addon that captures raw chat
-entries. Used to gather samples for parser heuristics. Can be left
-enabled alongside phase 2 to keep collecting more data.
+- **Phase 1 (done):** `LFGScannerLogger` companion addon - captures
+  raw chat for sample collection. Useful for contributing better
+  parser dictionaries; not needed by end users.
+- **Phase 2 (current):** `LFGScanner` itself - the live tracker
+  described above. Code complete, in-game iteration ongoing.
+- **Phase 3 (future):** per-character profiles, Polish-language
+  patterns, export to clipboard, leader-merge across officer reposts.
 
-**Phase 2 (code ready, in-game test pending):** `LFGScanner` - the
-actual addon: live raid table, full-message tooltip, multi-channel /
-multi-officer dedup, lifecycle inactive=2min/drop=5min, click = whisper.
-Slash: `/lfg show|hide|toggle|reset|stats|resetpos`.
+See [docs/PHASES.md](docs/PHASES.md) for details.
 
-Documentation:
-- [docs/PHASES.md](docs/PHASES.md) - project phases.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - layout and technical decisions.
-- [docs/PARSING.md](docs/PARSING.md) - LFM classification and extraction heuristics (derived from real data).
-- [docs/sample-postings.md](docs/sample-postings.md) - representative annotated examples used as parser test fixtures.
+## Documentation
 
-## WoW client paths
+- [docs/PHASES.md](docs/PHASES.md) - project phases and roadmap.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - layout, WoW APIs
+  used, design decisions.
+- [docs/PARSING.md](docs/PARSING.md) - how messages are classified and
+  what fields the parser extracts. Living document, derived from real
+  Warmane data.
+- [docs/sample-postings.md](docs/sample-postings.md) - manually
+  labeled real postings used as parser test fixtures.
 
-The deploy and collect scripts default to `WOW_DIR=$HOME/Games/wow`.
-Override the env var if your client lives elsewhere:
-
-- Client:                   `$WOW_DIR/`
-- AddOns (shared):          `$WOW_DIR/Interface/AddOns/`
-- SavedVariables (per acc): `$WOW_DIR/WTF/Account/<ACCOUNT>/SavedVariables/`
-
-The addon is one directory in `Interface/AddOns/` and works for every
-account. Each account writes its own `LFGScannerLogger.lua` into its
-`SavedVariables/`. To merge them for analysis, use `collect-logs.sh`
-(below).
-
-## Install (end users)
-
-Grab the latest ZIP from the [Releases](../../releases/latest) page and
-unpack it into your client's `Interface/AddOns/` folder. The ZIP
-already contains the addon directory at the top level - drop it next
-to your other AddOns and `/reload` (or relog).
-
-## Deploy from source (development)
+## Building from source
 
 ```bash
-# All addons from ./addons/
+# Deploy every addon in ./addons/ to the WoW client
 ./scripts/deploy.sh
 
 # Just one
-./scripts/deploy.sh LFGScannerLogger
+./scripts/deploy.sh LFGScanner
 
-# Different client path
-WOW_DIR=/other/path ./scripts/deploy.sh
+# Custom client path (default is $HOME/Games/wow)
+WOW_DIR=/path/to/wow ./scripts/deploy.sh
 ```
 
-The script just copies the addon directory into `Interface/AddOns/`
-(deletes the previous version first). After deploy, run `/reload`
-in-game or relog.
+The script copies each addon directory 1:1 into
+`$WOW_DIR/Interface/AddOns/`, replacing the previous version. Run
+`/reload` in-game afterwards.
 
-## Phase 2 - using LFGScanner
+Releases are produced by a GitHub Action on `v*` tag pushes - it ZIPs
+each addon directory under `addons/` and attaches them to the GitHub
+Release page. End users don't need this repo, just the ZIP.
 
-1. `./scripts/deploy.sh LFGScanner`
-2. Enter the game, enable it in the AddOns list on the character
-   selection screen.
-3. After login, an `LFG Scanner` frame appears. It can be moved (drag
-   the title bar) and resized (handle in the bottom-right corner).
-4. The frame updates automatically - every `LFM` posted in `general`,
-   `global`, `trade`, `world`, or `lookingforgroup` is classified,
-   deduplicated, and shown.
-5. Hover a row for a tooltip with the full posting + posters list,
-   channels, post count.
-6. Left-click a row - opens a `/w <poster>` chat.
-7. Slash:
-   - `/lfg` or `/lfg toggle` - show/hide
-   - `/lfg reset` - clear the raid list
-   - `/lfg stats` - active raid count
-   - `/lfg resetpos` - restore default frame position/size
+## Companion addon: LFGScannerLogger
 
-For classification and extraction heuristics see [docs/PARSING.md](docs/PARSING.md).
+A separate, minimal addon that just records raw chat into
+SavedVariables. Used for collecting samples to improve the parser. Not
+required for normal use.
 
-## Phase 1 - using LFGScannerLogger
+If you'd like to contribute samples:
 
 1. `./scripts/deploy.sh LFGScannerLogger`
-2. Enter the game, make sure the addon is enabled (AddOns list on the
-   character select screen, with "Load out of date AddOns" checked if
-   needed).
-3. Spend some time in Dalaran with `/general` and `/global` (and
-   optionally `/trade`, `/world`) channels active.
-4. In-game:
-   - `/lfglog` or `/lfglog stats` - statistics (entry count, last entry).
-   - `/lfglog clear` - clear DB (e.g. after analysis).
-5. Close the game **or** run `/reload` - SavedVariables get flushed to
-   disk. Do this for **each account separately**, because
-   SavedVariables is written only for the active account.
-6. Data files:
-   `$WOW_DIR/WTF/Account/<ACCOUNT>/SavedVariables/LFGScannerLogger.lua`
-   (one per logged-in account).
-7. Collect into the repo (to `data/samples/<ACCOUNT>/`):
+2. Play with the addon enabled. Use `/lfglog stats` for a count,
+   `/lfglog clear` to wipe the buffer.
+3. Run `/reload` (or log out) so SavedVariables flush to disk - do
+   this for **each account separately**, since SavedVariables is
+   per-account.
+4. Pull the file(s) into the repo:
    ```bash
    ./scripts/collect-logs.sh                       # all accounts
-   ./scripts/collect-logs.sh ACCOUNT1 ACCOUNT2     # only the listed ones
+   ./scripts/collect-logs.sh ACCOUNT1 ACCOUNT2     # only the listed
    ```
+   Files land in `data/samples/<ACCOUNT>/` (gitignored).
 
-## Stored data format
+### Stored data format
 
-`LFGScannerLoggerDB` (Lua-table) holds:
+`LFGScannerLoggerDB` (a Lua table in SavedVariables):
 
 ```lua
 LFGScannerLoggerDB = {
@@ -127,4 +171,8 @@ LFGScannerLoggerDB = {
 }
 ```
 
-Limit: last 50,000 entries (older ones are trimmed on save).
+Cap: the most recent 50,000 entries (older ones are trimmed on save).
+
+## License
+
+[MIT](LICENSE).
