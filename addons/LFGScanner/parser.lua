@@ -546,11 +546,14 @@ function P.extractDiscordStatus(low)
     return "required"
   end
 
-  -- 3. Discord server link OR a bare "discord"/"disc" mention - usually means
-  -- you have to join the server. Classified as required here.
+  -- 3. Discord server link OR a bare "discord" mention - usually means you
+  -- have to join the server. Classified as required here.
+  -- Note: `disc` alone is NOT used here - it collides 100% with the
+  -- Discipline-priest role abbreviation in role lists ("need ... DISC RDUDU
+  -- HPALA ..."), which has nothing to do with Discord.
   if low:find("discord%.gg/") or low:find("discord%.com/")
      or low:find("%sdiscord%s") or low:find("%sdiscord$") or low:find("^discord%s")
-     or low:find("%sdisc%s") or low:find("using%s+discord") or low:find("on%s+discord") then
+     or low:find("using%s+discord") or low:find("on%s+discord") then
     return "required"
   end
 
