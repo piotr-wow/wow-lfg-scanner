@@ -337,12 +337,36 @@ function P.extractGS(low)
   a, b = low:match("min%.?%s+(%d)[%.,]?(%d?)%s*k")
   if a then return tonumber(a) * 1000 + (tonumber(b) or 0) * 100, false end
 
-  -- gs 5.5 / GS 5.8
-  a, b = low:match("gs%s+(%d)[%.,]?(%d?)")
-  if a then return tonumber(a) * 1000 + (tonumber(b) or 0) * 100, true end
+  -- gs 5.5 / GS 5.8 - decimal mandatory; without it, 'class gs 24/25' (where
+  -- "24" is the member count) would falsely report 2.4k GS. Leading digit
+  -- restricted to 4-9.
+  a, b = low:match("gs%s+([4-9])[%.,](%d)")
+  if a then return tonumber(a) * 1000 + tonumber(b) * 100, true end
+
+  -- 5K7 gs / 5K8 gs - 'K' as decimal delimiter rather than unit. Must run
+  -- before the N-gs-rev rule, otherwise that rule grabs only the trailing
+  -- digit ('8 gs' -> 8000 instead of 5800).
+  a, b = low:match("([4-9])k(%d)%s*gs")
+  if a then return tonumber(a) * 1000 + tonumber(b) * 100, false end
+
+  -- 5.6GS / 5.6 gs / 5.6kgs / 5.5 k gs / +5.9gs - number followed by gs, with
+  -- an optional 'k' between number and 'gs'. Plus sign in front (if any) is
+  -- not consumed; it just sits before the captured digit. Treated as a
+  -- minimum (not strict).
+  a, b = low:match("(%d)[%.,]?(%d?)%s*k?%s*gs")
+  if a then return tonumber(a) * 1000 + (tonumber(b) or 0) * 100, false end
 
   -- 6.2+ / 6,2+ / 6.2k+ / 5.8K+
   a, b = low:match("(%d)[%.,](%d)%s*k?%+")
+  if a then return tonumber(a) * 1000 + tonumber(b) * 100, false end
+
+  -- +6.1k / +5.8 k - leading plus indicates "or higher".
+  a, b = low:match("%+%s*(%d)[%.,]?(%d?)%s*k")
+  if a then return tonumber(a) * 1000 + (tonumber(b) or 0) * 100, false end
+
+  -- 5.5k / 5,5k - bare decimal-k with no plus, no gs context. Decimal is
+  -- required (single-digit '5k' would collide with gold prices).
+  a, b = low:match("(%d)[%.,](%d)%s*k%f[%A]")
   if a then return tonumber(a) * 1000 + tonumber(b) * 100, false end
 
   -- 5800+ gs / 5800gs
@@ -352,6 +376,20 @@ function P.extractGS(low)
   -- "all +6,2+achiv" - pattern from the data
   a, b = low:match("all%s*%+?(%d)[%.,](%d)")
   if a then return tonumber(a) * 1000 + tonumber(b) * 100, false end
+
+  -- 5K7+ / 5K8++ - alternative notation where 'K' is a delimiter not a unit:
+  -- '5K7' means 5.7k. Without this, the single-digit fallback below would
+  -- grab '7+' alone and report 7000 instead of 5700.
+  a, b = low:match("([4-9])k(%d)%+")
+  if a then return tonumber(a) * 1000 + tonumber(b) * 100, false end
+
+  -- 5+ / 6++ / 6+++ - bare single-digit GS in 1k granularity. Frontier `%f[%d]`
+  -- prevents capturing the trailing digit of multi-digit numbers like '5800+'
+  -- or '5K8+'. Digit restricted to 4-9 (realistic GS minimums in WotLK; values
+  -- below 4k are not seen in raid LFMs and would only fire on stray noise).
+  -- Last fallback - more specific decimal rules run first.
+  local d = low:match("%f[%d]([4-9])%+")
+  if d then return tonumber(d) * 1000, false end
 
   return nil, nil
 end
